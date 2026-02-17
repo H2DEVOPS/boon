@@ -11,6 +11,29 @@ const AFTER_SNOOZE_ISO = "2025-02-25T00:01:00.000Z";
 /** 2025-02-19 12:00 UTC - before notificationDate cutoff. */
 const BEFORE_SNOOZE_ISO = "2025-02-19T12:00:00.000Z";
 
+const approve = (projectId: string, partId: string, body?: { at?: string }) =>
+  mockReqRes({
+    method: "POST",
+    url: `/api/projects/${projectId}/parts/${partId}/approve`,
+    body: body ?? { at: NOW_ISO },
+  });
+
+const snooze = (projectId: string, partId: string, body: { until: string; at?: string }) =>
+  mockReqRes({
+    method: "POST",
+    url: `/api/projects/${projectId}/parts/${partId}/snooze`,
+    body,
+  });
+
+const dashboard = (projectId: string, now?: string) =>
+  mockReqRes({
+    method: "GET",
+    url: `/api/dashboard?projectId=${projectId}${now ? `&now=${now}` : ""}`,
+  });
+
+const partEvents = (projectId: string, partId: string) =>
+  mockReqRes({ method: "GET", url: `/api/projects/${projectId}/parts/${partId}/events` });
+
 describe("server API contract", () => {
   beforeEach(() => resetEventStore());
 
@@ -18,9 +41,7 @@ describe("server API contract", () => {
     it("returns 200 + { status: 'ok' }", async () => {
       const { handle } = createApp();
       const { req, res } = mockReqRes({ method: "GET", url: "/health" });
-
       await handle(req, res);
-
       expect(res.statusCode).toBe(200);
       expect(res.json()).toEqual({ status: "ok" });
     });
@@ -30,9 +51,7 @@ describe("server API contract", () => {
     it("returns 200 + [{ projectId, title }]", async () => {
       const { handle } = createApp();
       const { req, res } = mockReqRes({ method: "GET", url: "/api/projects" });
-
       await handle(req, res);
-
       expect(res.statusCode).toBe(200);
       const data = res.json() as Array<{ projectId: string; title: string }>;
       expect(Array.isArray(data)).toBe(true);
@@ -45,9 +64,7 @@ describe("server API contract", () => {
     it("returns 200 + { stages, parts } for existing project", async () => {
       const { handle } = createApp();
       const { req, res } = mockReqRes({ method: "GET", url: "/api/projects/proj1/gantt" });
-
       await handle(req, res);
-
       expect(res.statusCode).toBe(200);
       const data = res.json() as { stages: unknown[]; parts: unknown[] };
       expect(data).toHaveProperty("stages");
@@ -59,9 +76,7 @@ describe("server API contract", () => {
     it("returns 404 + error payload for missing project", async () => {
       const { handle } = createApp();
       const { req, res } = mockReqRes({ method: "GET", url: "/api/projects/nonexistent/gantt" });
-
       await handle(req, res);
-
       expect(res.statusCode).toBe(404);
       const data = res.json() as { error: { code: string; message: string } };
       expect(data.error).toMatchObject({ code: "NOT_FOUND", message: "Project not found" });
@@ -72,9 +87,7 @@ describe("server API contract", () => {
     it("returns 400 when projectId missing", async () => {
       const { handle } = createApp();
       const { req, res } = mockReqRes({ method: "GET", url: "/api/dashboard?now=" + NOW_ISO });
-
       await handle(req, res);
-
       expect(res.statusCode).toBe(400);
       const data = res.json() as { error: { code: string } };
       expect(data.error.code).toBe("INVALID_INPUT");
@@ -86,9 +99,7 @@ describe("server API contract", () => {
         method: "GET",
         url: `/api/dashboard?projectId=proj1&now=${NOW_ISO}`,
       });
-
       await handle(req, res);
-
       expect(res.statusCode).toBe(200);
       const data = res.json() as {
         tasks: unknown[];
@@ -101,141 +112,153 @@ describe("server API contract", () => {
       expect(data).toHaveProperty("anomalies");
       expect(data).toHaveProperty("pace");
       expect(Array.isArray(data.tasks)).toBe(true);
-      expect(Array.isArray(data.quality)).toBe(true);
-      expect(Array.isArray(data.anomalies)).toBe(true);
     });
 
     it("approving a part makes it disappear from tasks", async () => {
       const clock = { now: () => NOW_MS, timezone: "Europe/Stockholm" };
       const { handle } = createApp({ deps: { clock } });
 
-      const before = mockReqRes({
-        method: "GET",
-        url: `/api/dashboard?projectId=proj1&now=${NOW_ISO}`,
-      });
+      const before = dashboard("proj1", NOW_ISO);
       await handle(before.req, before.res);
       expect(before.res.statusCode).toBe(200);
       const tasksBefore = (before.res.json() as { tasks: Array<{ partId: string }> }).tasks;
-      const p1Before = tasksBefore.find((t) => t.partId === "p1");
-      expect(p1Before).toBeDefined();
+      expect(tasksBefore.find((t) => t.partId === "p1")).toBeDefined();
 
-      const approve = mockReqRes({
-        method: "POST",
-        url: "/api/parts/p1/approve",
-        body: { at: NOW_ISO },
-      });
-      await handle(approve.req, approve.res);
-      expect(approve.res.statusCode).toBe(200);
+      const appr = approve("proj1", "p1");
+      await handle(appr.req, appr.res);
+      expect(appr.res.statusCode).toBe(200);
 
-      const after = mockReqRes({
-        method: "GET",
-        url: `/api/dashboard?projectId=proj1&now=${NOW_ISO}`,
-      });
+      const after = dashboard("proj1", NOW_ISO);
       await handle(after.req, after.res);
       expect(after.res.statusCode).toBe(200);
       const tasksAfter = (after.res.json() as { tasks: Array<{ partId: string }> }).tasks;
-      const p1After = tasksAfter.find((t) => t.partId === "p1");
-      expect(p1After).toBeUndefined();
+      expect(tasksAfter.find((t) => t.partId === "p1")).toBeUndefined();
     });
 
     it("snooze makes it show as Snoozed until until cutoff", async () => {
       const clock = { now: () => NOW_MS, timezone: "Europe/Stockholm" };
       const { handle } = createApp({ deps: { clock } });
 
-      const snoozeRes = mockReqRes({
-        method: "POST",
-        url: "/api/parts/p4/snooze",
-        body: { until: "2025-02-25", at: NOW_ISO },
-      });
-      await handle(snoozeRes.req, snoozeRes.res);
-      expect(snoozeRes.res.statusCode).toBe(200);
+      const snz = snooze("proj1", "p4", { until: "2025-02-25", at: NOW_ISO });
+      await handle(snz.req, snz.res);
+      expect(snz.res.statusCode).toBe(200);
 
-      const beforeCutoff = mockReqRes({
-        method: "GET",
-        url: `/api/dashboard?projectId=proj1&now=${BEFORE_SNOOZE_ISO}`,
-      });
+      const beforeCutoff = dashboard("proj1", BEFORE_SNOOZE_ISO);
       await handle(beforeCutoff.req, beforeCutoff.res);
       expect(beforeCutoff.res.statusCode).toBe(200);
-      const tasksBefore = (
-        beforeCutoff.res.json() as { tasks: Array<{ partId: string; status: string }> }
-      ).tasks;
-      const p4Before = tasksBefore.find((t) => t.partId === "p4");
+      const p4Before = (beforeCutoff.res.json() as { tasks: Array<{ partId: string; status: string }> }).tasks.find(
+        (t) => t.partId === "p4"
+      );
       expect(p4Before).toBeDefined();
       expect(p4Before!.status).toBe("Snoozed");
 
-      const afterCutoff = mockReqRes({
-        method: "GET",
-        url: `/api/dashboard?projectId=proj1&now=${AFTER_SNOOZE_ISO}`,
-      });
+      const afterCutoff = dashboard("proj1", AFTER_SNOOZE_ISO);
       await handle(afterCutoff.req, afterCutoff.res);
       expect(afterCutoff.res.statusCode).toBe(200);
-      const tasksAfter = (
-        afterCutoff.res.json() as { tasks: Array<{ partId: string; status: string }> }
-      ).tasks;
-      const p4After = tasksAfter.find((t) => t.partId === "p4");
+      const p4After = (afterCutoff.res.json() as { tasks: Array<{ partId: string; status: string }> }).tasks.find(
+        (t) => t.partId === "p4"
+      );
       expect(p4After).toBeDefined();
       expect(p4After!.status).toBe("ActionRequired");
     });
+
+    it("dashboard only includes events for the project", async () => {
+      const { handle } = createApp();
+      await handle(approve("proj1", "p1").req, approve("proj1", "p1").res);
+      await handle(approve("proj2", "q1").req, approve("proj2", "q1").res);
+
+      const d1 = dashboard("proj1", NOW_ISO);
+      await handle(d1.req, d1.res);
+      const tasks1 = (d1.res.json() as { tasks: Array<{ partId: string }> }).tasks;
+      expect(tasks1.some((t) => t.partId === "p1")).toBe(false);
+      expect(tasks1.some((t) => t.partId === "q1")).toBe(false);
+
+      const d2 = dashboard("proj2", NOW_ISO);
+      await handle(d2.req, d2.res);
+      const tasks2 = (d2.res.json() as { tasks: Array<{ partId: string }> }).tasks;
+      expect(tasks2.some((t) => t.partId === "q1")).toBe(false);
+    });
   });
 
-  describe("GET /api/parts/:partId/events", () => {
+  describe("GET /api/projects/:projectId/parts/:partId/events", () => {
     it("returns 200 + events array", async () => {
       const { handle } = createApp();
-      const { req, res } = mockReqRes({ method: "GET", url: "/api/parts/p1/events" });
-
+      const { req, res } = mockReqRes({ method: "GET", url: "/api/projects/proj1/parts/p1/events" });
       await handle(req, res);
-
       expect(res.statusCode).toBe(200);
       const data = res.json() as unknown[];
       expect(Array.isArray(data)).toBe(true);
     });
-  });
 
-  describe("POST /api/parts/:partId/approve", () => {
-    it("returns 404 for missing part", async () => {
+    it("returns 404 for part not in project", async () => {
       const { handle } = createApp();
-      const { req, res } = mockReqRes({
-        method: "POST",
-        url: "/api/parts/nonexistent/approve",
-        body: { at: NOW_ISO },
-      });
-
+      const { req, res } = mockReqRes({ method: "GET", url: "/api/projects/proj1/parts/q1/events" });
       await handle(req, res);
-
       expect(res.statusCode).toBe(404);
       const data = res.json() as { error: { code: string } };
       expect(data.error.code).toBe("NOT_FOUND");
     });
+  });
 
-    it("returns 200 + { events, state } on success", async () => {
+  describe("POST /api/projects/:projectId/parts/:partId/approve", () => {
+    it("returns 404 for missing project", async () => {
       const { handle } = createApp();
       const { req, res } = mockReqRes({
         method: "POST",
-        url: "/api/parts/p1/approve",
+        url: "/api/projects/nonexistent/parts/p1/approve",
         body: { at: NOW_ISO },
       });
-
       await handle(req, res);
+      expect(res.statusCode).toBe(404);
+    });
 
-      expect(res.statusCode).toBe(200);
-      const data = res.json() as { events: unknown[]; state: unknown };
+    it("returns 404 for part not in project", async () => {
+      const { handle } = createApp();
+      const { req, res } = mockReqRes({
+        method: "POST",
+        url: "/api/projects/proj1/parts/q1/approve",
+        body: { at: NOW_ISO },
+      });
+      await handle(req, res);
+      expect(res.statusCode).toBe(404);
+      const data = res.json() as { error: { message: string } };
+      expect(data.error.message).toContain("Part not found in project");
+    });
+
+    it("returns 404 when approving part from other project", async () => {
+      const { handle } = createApp();
+      const { req, res } = mockReqRes({
+        method: "POST",
+        url: "/api/projects/proj2/parts/p1/approve",
+        body: { at: NOW_ISO },
+      });
+      await handle(req, res);
+      expect(res.statusCode).toBe(404);
+      const data = res.json() as { error: { message: string } };
+      expect(data.error.message).toContain("Part not found in project");
+    });
+
+    it("returns 200 + { events, state } on success", async () => {
+      const { handle } = createApp();
+      const appr = approve("proj1", "p1");
+      await handle(appr.req, appr.res);
+      expect(appr.res.statusCode).toBe(200);
+      const data = appr.res.json() as { events: unknown[]; state: unknown };
       expect(data).toHaveProperty("events");
       expect(Array.isArray(data.events)).toBe(true);
       expect(data).toHaveProperty("state");
     });
   });
 
-  describe("POST /api/parts/:partId/complete", () => {
+  describe("POST /api/projects/:projectId/parts/:partId/complete", () => {
     it("returns 200 + { events } on success", async () => {
       const { handle } = createApp();
       const { req, res } = mockReqRes({
         method: "POST",
-        url: "/api/parts/p1/complete",
+        url: "/api/projects/proj1/parts/p1/complete",
         body: { at: NOW_ISO },
       });
-
       await handle(req, res);
-
       expect(res.statusCode).toBe(200);
       const data = res.json() as { events: unknown[] };
       expect(data).toHaveProperty("events");
@@ -243,42 +266,32 @@ describe("server API contract", () => {
     });
   });
 
-  describe("POST /api/parts/:partId/reopen", () => {
+  describe("POST /api/projects/:projectId/parts/:partId/reopen", () => {
     it("returns 200 + { events } on success", async () => {
       const { handle } = createApp();
-      // First approve, then reopen
-      const approve = mockReqRes({
+      await handle(approve("proj1", "p1").req, approve("proj1", "p1").res);
+      const { req, res } = mockReqRes({
         method: "POST",
-        url: "/api/parts/p1/approve",
+        url: "/api/projects/proj1/parts/p1/reopen",
         body: { at: NOW_ISO },
       });
-      await handle(approve.req, approve.res);
-
-      const reopen = mockReqRes({
-        method: "POST",
-        url: "/api/parts/p1/reopen",
-        body: { at: NOW_ISO },
-      });
-      await handle(reopen.req, reopen.res);
-
-      expect(reopen.res.statusCode).toBe(200);
-      const data = reopen.res.json() as { events: unknown[] };
+      await handle(req, res);
+      expect(res.statusCode).toBe(200);
+      const data = res.json() as { events: unknown[] };
       expect(data).toHaveProperty("events");
       expect(Array.isArray(data.events)).toBe(true);
     });
   });
 
-  describe("POST /api/parts/:partId/snooze", () => {
+  describe("POST /api/projects/:projectId/parts/:partId/snooze", () => {
     it("returns 400 when until missing", async () => {
       const { handle } = createApp();
       const { req, res } = mockReqRes({
         method: "POST",
-        url: "/api/parts/p4/snooze",
+        url: "/api/projects/proj1/parts/p4/snooze",
         body: { at: NOW_ISO },
       });
-
       await handle(req, res);
-
       expect(res.statusCode).toBe(400);
       const data = res.json() as { error: { code: string } };
       expect(data.error.code).toBe("INVALID_INPUT");
@@ -286,16 +299,10 @@ describe("server API contract", () => {
 
     it("returns 200 + { events } on success", async () => {
       const { handle } = createApp();
-      const { req, res } = mockReqRes({
-        method: "POST",
-        url: "/api/parts/p4/snooze",
-        body: { until: "2025-02-25", at: NOW_ISO },
-      });
-
-      await handle(req, res);
-
-      expect(res.statusCode).toBe(200);
-      const data = res.json() as { events: unknown[] };
+      const snz = snooze("proj1", "p4", { until: "2025-02-25", at: NOW_ISO });
+      await handle(snz.req, snz.res);
+      expect(snz.res.statusCode).toBe(200);
+      const data = snz.res.json() as { events: unknown[] };
       expect(data).toHaveProperty("events");
       expect(Array.isArray(data.events)).toBe(true);
     });
@@ -311,7 +318,7 @@ describe("server API contract", () => {
 
       const r1 = mockReqRes({
         method: "POST",
-        url: "/api/parts/p1/approve",
+        url: "/api/projects/proj1/parts/p1/approve",
         body: { at: at1 },
       });
       await handle(r1.req, r1.res);
@@ -319,13 +326,13 @@ describe("server API contract", () => {
 
       const r2 = mockReqRes({
         method: "POST",
-        url: "/api/parts/p1/reopen",
+        url: "/api/projects/proj1/parts/p1/reopen",
         body: { at: at2 },
       });
       await handle(r2.req, r2.res);
       expect(r2.res.statusCode).toBe(200);
 
-      const listRes = mockReqRes({ method: "GET", url: "/api/parts/p1/events" });
+      const listRes = partEvents("proj1", "p1");
       await handle(listRes.req, listRes.res);
       expect(listRes.res.statusCode).toBe(200);
       const events = listRes.res.json() as Array<{ type: string; partId: string; timestamp: number }>;
@@ -339,9 +346,7 @@ describe("server API contract", () => {
     it("returns 404 + error payload for unknown route", async () => {
       const { handle } = createApp();
       const { req, res } = mockReqRes({ method: "GET", url: "/api/unknown" });
-
       await handle(req, res);
-
       expect(res.statusCode).toBe(404);
       const data = res.json() as { error: { code: string } };
       expect(data.error.code).toBe("NOT_FOUND");

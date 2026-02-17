@@ -5,8 +5,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { EventStore } from "../domain/eventStore.js";
-import type { ProjectCalendar } from "../domain/calendar.js";
-import type { ProjectRepo, PartRepo } from "../domain/repositories.js";
+import type { ProjectRepo } from "../domain/repositories.js";
 import { approvePart, completePart, snoozePart, reopenPart } from "../domain/partLifecycle.js";
 import { projectDashboardState, projectPartState } from "../domain/projections.js";
 import { asTimestamp } from "../domain/core.js";
@@ -20,8 +19,6 @@ const API = "/api";
 export interface HandlerDeps {
   eventStore: EventStore;
   projectRepo: ProjectRepo;
-  partRepo: PartRepo;
-  calendar: ProjectCalendar;
   clock: { now: () => number; timezone: string };
   logger?: { error: (err: unknown) => void };
 }
@@ -72,7 +69,7 @@ function parseBody(req: IncomingMessage): Promise<unknown> {
   });
 }
 
-/** Parse ISO string to ms. Returns NaN if invalid. */
+/** Parse ISO string to ms. Returns null if invalid. */
 function parseIsoToMs(iso: string | undefined): number | null {
   if (iso == null || typeof iso !== "string") return null;
   const ms = new Date(iso).getTime();
@@ -114,12 +111,19 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
     const ganttMatch = pathname.match(new RegExp(`^${API}/projects/([^/]+)/gantt$`));
     if (method === "GET" && ganttMatch) {
       const projectId = decodeURIComponent(ganttMatch[1] ?? "");
-      const project = await deps.projectRepo.getProject(projectId);
-      if (!project) {
+      const snapshot = await deps.projectRepo.getProject(projectId);
+      if (!snapshot) {
         sendError(res, 404, "NOT_FOUND", "Project not found", { projectId });
         return;
       }
-      sendJson(res, 200, { stages: project.stages, parts: project.parts });
+      const ganttParts = snapshot.parts.map((p) => ({
+        id: p.partId,
+        stageId: p.stageId,
+        title: p.title,
+        startDate: p.startDate,
+        endDate: p.endDate,
+      }));
+      sendJson(res, 200, { stages: snapshot.stages, parts: ganttParts });
       return;
     }
 
@@ -130,50 +134,77 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
         sendError(res, 400, "INVALID_INPUT", "projectId required");
         return;
       }
-      const parts = await deps.partRepo.listPartsByProject(projectId);
+      const snapshot = await deps.projectRepo.getProject(projectId);
+      if (!snapshot) {
+        sendError(res, 404, "NOT_FOUND", "Project not found", { projectId });
+        return;
+      }
       const nowParam = query.get("now");
       const ts = asTimestamp(nowParam != null ? (parseIsoToMs(nowParam) ?? deps.clock.now()) : deps.clock.now());
-      const events = await deps.eventStore.loadAll();
+      const events = await deps.eventStore.loadByProject(projectId);
       const lifecycleEvents = getPartLifecycleEvents(events);
-      const tasks = projectDashboardState(parts, lifecycleEvents, ts, deps.clock.timezone, deps.calendar);
+      const tasks = projectDashboardState(
+        snapshot.parts,
+        lifecycleEvents,
+        ts,
+        deps.clock.timezone,
+        snapshot.calendar
+      );
       const pace = {};
       sendJson(res, 200, { tasks, quality: [], anomalies: [], pace });
       return;
     }
 
-    // --- GET /api/parts/:partId/events ---
-    const partEventsMatch = pathname.match(new RegExp(`^${API}/parts/([^/]+)/events$`));
+    // --- GET /api/projects/:projectId/parts/:partId/events ---
+    const partEventsMatch = pathname.match(new RegExp(`^${API}/projects/([^/]+)/parts/([^/]+)/events$`));
     if (method === "GET" && partEventsMatch) {
-      const partId = decodeURIComponent(partEventsMatch[1] ?? "");
-      const events = await deps.eventStore.loadByPart(partId);
+      const projectId = decodeURIComponent(partEventsMatch[1] ?? "");
+      const partId = decodeURIComponent(partEventsMatch[2] ?? "");
+      const snapshot = await deps.projectRepo.getProject(projectId);
+      if (!snapshot) {
+        sendError(res, 404, "NOT_FOUND", "Project not found", { projectId });
+        return;
+      }
+      const part = snapshot.parts.find((p) => p.partId === partId);
+      if (!part) {
+        sendError(res, 404, "NOT_FOUND", "Part not found", { projectId, partId });
+        return;
+      }
+      const events = await deps.eventStore.loadByPart(projectId, partId);
       sendJson(res, 200, events);
       return;
     }
 
-    // --- POST /api/parts/:partId/approve ---
-    const approveMatch = pathname.match(new RegExp(`^${API}/parts/([^/]+)/approve$`));
+    // --- POST /api/projects/:projectId/parts/:partId/approve ---
+    const approveMatch = pathname.match(new RegExp(`^${API}/projects/([^/]+)/parts/([^/]+)/approve$`));
     if (method === "POST" && approveMatch) {
-      const partId = decodeURIComponent(approveMatch[1] ?? "");
-      const part = await deps.partRepo.getPart(partId);
+      const projectId = decodeURIComponent(approveMatch[1] ?? "");
+      const partId = decodeURIComponent(approveMatch[2] ?? "");
+      const snapshot = await deps.projectRepo.getProject(projectId);
+      if (!snapshot) {
+        sendError(res, 404, "NOT_FOUND", "Project not found", { projectId });
+        return;
+      }
+      const part = snapshot.parts.find((p) => p.partId === partId);
       if (!part) {
-        sendError(res, 404, "NOT_FOUND", "Part not found", { partId });
+        sendError(res, 404, "NOT_FOUND", "Part not found in project", { projectId, partId });
         return;
       }
       try {
         const body = (await parseBody(req)) as { at?: string };
         const ts = parseIsoToMs(body?.at) ?? deps.clock.now();
-        const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(partId));
+        const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(projectId, partId));
         const next = approvePart(events, partId, asTimestamp(ts));
         const delta = next.slice(events.length);
-        await deps.eventStore.append(delta);
-        const all = await deps.eventStore.loadAll();
+        await deps.eventStore.append(projectId, delta);
+        const all = await deps.eventStore.loadByProject(projectId);
         const projection = projectPartState(
           getPartLifecycleEvents(all),
           partId,
           part.endDate,
           asTimestamp(ts),
           deps.clock.timezone,
-          deps.calendar
+          snapshot.calendar
         );
         sendJson(res, 200, { events: delta, state: projection });
       } catch (err) {
@@ -186,22 +217,28 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
       return;
     }
 
-    // --- POST /api/parts/:partId/complete ---
-    const completeMatch = pathname.match(new RegExp(`^${API}/parts/([^/]+)/complete$`));
+    // --- POST /api/projects/:projectId/parts/:partId/complete ---
+    const completeMatch = pathname.match(new RegExp(`^${API}/projects/([^/]+)/parts/([^/]+)/complete$`));
     if (method === "POST" && completeMatch) {
-      const partId = decodeURIComponent(completeMatch[1] ?? "");
-      const part = await deps.partRepo.getPart(partId);
+      const projectId = decodeURIComponent(completeMatch[1] ?? "");
+      const partId = decodeURIComponent(completeMatch[2] ?? "");
+      const snapshot = await deps.projectRepo.getProject(projectId);
+      if (!snapshot) {
+        sendError(res, 404, "NOT_FOUND", "Project not found", { projectId });
+        return;
+      }
+      const part = snapshot.parts.find((p) => p.partId === partId);
       if (!part) {
-        sendError(res, 404, "NOT_FOUND", "Part not found", { partId });
+        sendError(res, 404, "NOT_FOUND", "Part not found in project", { projectId, partId });
         return;
       }
       try {
         const body = (await parseBody(req)) as { at?: string };
         const ts = parseIsoToMs(body?.at) ?? deps.clock.now();
-        const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(partId));
+        const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(projectId, partId));
         const next = completePart(events, partId, asTimestamp(ts));
         const delta = next.slice(events.length);
-        await deps.eventStore.append(delta);
+        await deps.eventStore.append(projectId, delta);
         sendJson(res, 200, { events: delta });
       } catch (err) {
         if (err instanceof InvariantViolation) {
@@ -213,22 +250,28 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
       return;
     }
 
-    // --- POST /api/parts/:partId/reopen ---
-    const reopenMatch = pathname.match(new RegExp(`^${API}/parts/([^/]+)/reopen$`));
+    // --- POST /api/projects/:projectId/parts/:partId/reopen ---
+    const reopenMatch = pathname.match(new RegExp(`^${API}/projects/([^/]+)/parts/([^/]+)/reopen$`));
     if (method === "POST" && reopenMatch) {
-      const partId = decodeURIComponent(reopenMatch[1] ?? "");
-      const part = await deps.partRepo.getPart(partId);
+      const projectId = decodeURIComponent(reopenMatch[1] ?? "");
+      const partId = decodeURIComponent(reopenMatch[2] ?? "");
+      const snapshot = await deps.projectRepo.getProject(projectId);
+      if (!snapshot) {
+        sendError(res, 404, "NOT_FOUND", "Project not found", { projectId });
+        return;
+      }
+      const part = snapshot.parts.find((p) => p.partId === partId);
       if (!part) {
-        sendError(res, 404, "NOT_FOUND", "Part not found", { partId });
+        sendError(res, 404, "NOT_FOUND", "Part not found in project", { projectId, partId });
         return;
       }
       try {
         const body = (await parseBody(req)) as { at?: string };
         const ts = parseIsoToMs(body?.at) ?? deps.clock.now();
-        const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(partId));
+        const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(projectId, partId));
         const next = reopenPart(events, partId, asTimestamp(ts));
         const delta = next.slice(events.length);
-        await deps.eventStore.append(delta);
+        await deps.eventStore.append(projectId, delta);
         sendJson(res, 200, { events: delta });
       } catch (err) {
         if (err instanceof InvariantViolation) {
@@ -240,13 +283,19 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
       return;
     }
 
-    // --- POST /api/parts/:partId/snooze { until: DateKey, at?: ISO } ---
-    const snoozeMatch = pathname.match(new RegExp(`^${API}/parts/([^/]+)/snooze$`));
+    // --- POST /api/projects/:projectId/parts/:partId/snooze { until: DateKey, at?: ISO } ---
+    const snoozeMatch = pathname.match(new RegExp(`^${API}/projects/([^/]+)/parts/([^/]+)/snooze$`));
     if (method === "POST" && snoozeMatch) {
-      const partId = decodeURIComponent(snoozeMatch[1] ?? "");
-      const part = await deps.partRepo.getPart(partId);
+      const projectId = decodeURIComponent(snoozeMatch[1] ?? "");
+      const partId = decodeURIComponent(snoozeMatch[2] ?? "");
+      const snapshot = await deps.projectRepo.getProject(projectId);
+      if (!snapshot) {
+        sendError(res, 404, "NOT_FOUND", "Project not found", { projectId });
+        return;
+      }
+      const part = snapshot.parts.find((p) => p.partId === partId);
       if (!part) {
-        sendError(res, 404, "NOT_FOUND", "Part not found", { partId });
+        sendError(res, 404, "NOT_FOUND", "Part not found in project", { projectId, partId });
         return;
       }
       try {
@@ -257,10 +306,10 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
           return;
         }
         const ts = parseIsoToMs(body?.at) ?? deps.clock.now();
-        const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(partId));
+        const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(projectId, partId));
         const next = snoozePart(events, partId, until, asTimestamp(ts));
         const delta = next.slice(events.length);
-        await deps.eventStore.append(delta);
+        await deps.eventStore.append(projectId, delta);
         sendJson(res, 200, { events: delta });
       } catch (err) {
         if (err instanceof InvariantViolation) {
