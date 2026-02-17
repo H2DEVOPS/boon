@@ -21,8 +21,8 @@ function createEventStore(): EventStore {
 }
 
 function createProjectRepo(): ProjectRepo {
-  if (process.env.PROJECT_REPO === "file") {
-    const dir = process.env.PROJECT_REPO_DIR ?? "./data/projects";
+  if (process.env.PROJECT_STORE === "file") {
+    const dir = process.env.PROJECT_STORE_DIR ?? "./data/projects";
     const rootDir = path.resolve(dir);
     return new FileProjectRepo(rootDir);
   }

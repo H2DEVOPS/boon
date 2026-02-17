@@ -26,9 +26,16 @@ export class FileProjectRepo implements ProjectRepo {
 
   private async loadSnapshotFromFile(file: string): Promise<ProjectSnapshot> {
     const text = await fs.readFile(file, "utf8");
-    const raw = JSON.parse(text) as ProjectSnapshot;
+
+    let raw: ProjectSnapshot;
+    try {
+      raw = JSON.parse(text) as ProjectSnapshot;
+    } catch {
+      throw new Error("Invalid JSON in project snapshot");
+    }
+
     validateProjectSnapshot(raw);
-    // Defensive copy: shallow clone + cloned arrays
+
     return {
       projectId: raw.projectId,
       title: raw.title,
@@ -44,40 +51,41 @@ export class FileProjectRepo implements ProjectRepo {
 
   async listProjects(): Promise<readonly ProjectSummary[]> {
     let entries: string[];
+
     try {
       entries = await fs.readdir(this.rootDir);
     } catch (err: unknown) {
       const e = err as NodeJS.ErrnoException;
-      if (e && e.code === "ENOENT") {
-        return [];
-      }
+      if (e?.code === "ENOENT") return [];
       throw err;
     }
 
     const result: ProjectSummary[] = [];
+
     for (const name of entries) {
       if (!name.endsWith(".snapshot.json")) continue;
-      const projectId = name.replace(/\.snapshot\.json$/, "");
+
       const file = path.join(this.rootDir, name);
-      // Load snapshot to read title + validate
       const snapshot = await this.loadSnapshotFromFile(file);
-      result.push({ projectId, title: snapshot.title });
+
+      result.push({
+        projectId: snapshot.projectId,
+        title: snapshot.title,
+      });
     }
+
     return result;
   }
 
   async getProject(projectId: string): Promise<ProjectSnapshot | null> {
     const file = this.snapshotPath(projectId);
+
     try {
-      const snapshot = await this.loadSnapshotFromFile(file);
-      return snapshot;
+      return await this.loadSnapshotFromFile(file);
     } catch (err: unknown) {
       const e = err as NodeJS.ErrnoException;
-      if (e && e.code === "ENOENT") {
-        return null;
-      }
+      if (e?.code === "ENOENT") return null;
       throw err;
     }
   }
 }
-
