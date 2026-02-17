@@ -6,8 +6,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Server } from "node:http";
 import { createHandler, type HandlerDeps, type RequestHandler } from "./handler.js";
-import { eventStore } from "./deps.js";
-import { createMockProjectRepo } from "./mockRepos.js";
+import { eventStore, projectRepo } from "./deps.js";
 import { apiError } from "./apiErrors.js";
 
 export interface AppOptions {
@@ -17,7 +16,7 @@ export interface AppOptions {
 function defaultDeps(): HandlerDeps {
   return {
     eventStore,
-    projectRepo: createMockProjectRepo(),
+    projectRepo,
     clock: { now: () => Date.now(), timezone: "Europe/Stockholm" },
     logger: { error: (err) => console.error(err) },
   };

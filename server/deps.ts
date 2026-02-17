@@ -1,15 +1,42 @@
 /**
- * Server dependencies — event store, project repo.
- * Swap to DB later without touching domain.
+ * Server dependencies — event store selection.
+ * Swap to DB or file without touching domain/handler.
  */
 
+import path from "node:path";
 import { InMemoryProjectEventStore } from "../domain/eventStore.js";
 import type { EventStore } from "../domain/eventStore.js";
+import type { ProjectRepo } from "../domain/repositories.js";
+import { FileProjectEventStore } from "./fileEventStore.js";
+import { FileProjectRepo } from "./fileProjectRepo.js";
+import { createMockProjectRepo } from "./mockRepos.js";
 
-const store = new InMemoryProjectEventStore();
-export const eventStore: EventStore = store;
-
-/** Reset event store for tests. */
-export function resetEventStore(): void {
-  store.clear();
+function createEventStore(): EventStore {
+  if (process.env.EVENT_STORE === "file") {
+    const dir = process.env.EVENT_STORE_DIR ?? "./data";
+    const rootDir = path.resolve(dir);
+    return new FileProjectEventStore(rootDir);
+  }
+  return new InMemoryProjectEventStore();
 }
+
+function createProjectRepo(): ProjectRepo {
+  if (process.env.PROJECT_REPO === "file") {
+    const dir = process.env.PROJECT_REPO_DIR ?? "./data/projects";
+    const rootDir = path.resolve(dir);
+    return new FileProjectRepo(rootDir);
+  }
+  return createMockProjectRepo();
+}
+
+const store = createEventStore();
+export const eventStore: EventStore = store;
+export const projectRepo: ProjectRepo = createProjectRepo();
+
+/** Reset event store for tests (only supported for in-memory adapter). */
+export function resetEventStore(): void {
+  if (store instanceof InMemoryProjectEventStore) {
+    store.clear();
+  }
+}
+

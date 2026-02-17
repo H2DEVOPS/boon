@@ -1,0 +1,46 @@
+{
+  "projectId": "proj1",
+  "title": "Demo Project",
+  "stages": [
+    {
+      "id": "s1",
+      "title": "Stage 1"
+    }
+  ],
+  "parts": [
+    {
+      "partId": "p1",
+      "endDate": "2025-02-17",
+      "stageId": "s1",
+      "title": "Part 1",
+      "startDate": "2025-02-01"
+    },
+    {
+      "partId": "p2",
+      "endDate": "2025-02-18",
+      "stageId": "s1",
+      "title": "Part 2",
+      "startDate": "2025-02-01"
+    },
+    {
+      "partId": "p3",
+      "endDate": "2025-02-20",
+      "stageId": "s1",
+      "title": "Part 3",
+      "startDate": "2025-02-01"
+    },
+    {
+      "partId": "p4",
+      "endDate": "2025-02-17",
+      "stageId": "s1",
+      "title": "Part 4",
+      "startDate": "2025-02-01"
+    }
+  ],
+  "calendar": {
+    "timezone": "Europe/Stockholm",
+    "weekendDays": [0, 6],
+    "overrides": []
+  }
+}
+

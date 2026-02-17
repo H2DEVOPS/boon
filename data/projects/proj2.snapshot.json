@@ -1,0 +1,25 @@
+{
+  "projectId": "proj2",
+  "title": "Other Project",
+  "stages": [
+    {
+      "id": "s1",
+      "title": "Stage 1"
+    }
+  ],
+  "parts": [
+    {
+      "partId": "q1",
+      "endDate": "2025-03-01",
+      "stageId": "s1",
+      "title": "Part Q1",
+      "startDate": "2025-02-15"
+    }
+  ],
+  "calendar": {
+    "timezone": "Europe/Stockholm",
+    "weekendDays": [0, 6],
+    "overrides": []
+  }
+}
+
