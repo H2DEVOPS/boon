@@ -23,3 +23,5 @@ Core platform project.
 **Web client**
 
 - `npx ts-node web/index.ts` — fetch health from server (server must be running)
+
+Test commit trigger
