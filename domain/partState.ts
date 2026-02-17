@@ -1,6 +1,6 @@
 /**
  * Domain part state — lifecycle state machine for parts.
- * Uses cutoff 00:01 + timezone. No external libs.
+ * Cutoff is strictly 00:01:00 in timezone (never midnight). No external libs.
  */
 
 import type { Timestamp } from "./core.js";
@@ -20,12 +20,15 @@ export interface PartStateInputs {
   readonly timezone: string;
 }
 
-// --- Cutoff helpers ---
-// cutoff(date) = date at 00:01 in timezone (not midnight).
-// now < cutoff(date)  → before cutoff (previous state)
-// now >= cutoff(date) → at or past cutoff
+// --- Cutoff model ---
+// cutoff(date) = date at 00:01:00 in timezone (NOT midnight).
+// 00:00:00 – 00:00:59 → before cutoff
+// 00:01:00 and later   → at or after cutoff
 
-function getDateAndTimeInTz(ts: number, timezone: string): { date: DateOnly; time: string } {
+function getDateAndTimeInTz(
+  ts: number,
+  timezone: string
+): { date: DateOnly; hour: number; minute: number } {
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
     year: "numeric",
@@ -37,18 +40,18 @@ function getDateAndTimeInTz(ts: number, timezone: string): { date: DateOnly; tim
     hour12: false,
   });
   const parts = formatter.formatToParts(ts);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "0";
   const date: DateOnly = `${get("year")}-${get("month")}-${get("day")}`;
-  const time = `${get("hour")}:${get("minute")}:${get("second")}`;
-  return { date, time };
+  return { date, hour: Number(get("hour")), minute: Number(get("minute")) };
 }
 
-/** True iff now >= cutoff(dateOnly), i.e. at or past 00:01 on that date in timezone. */
+/** True iff now >= cutoff(dateOnly). Uses explicit date first, then time. */
 function isAtOrPastCutoff(now: Timestamp, dateOnly: DateOnly, timezone: string): boolean {
-  const { date, time } = getDateAndTimeInTz(now, timezone);
+  const { date, hour, minute } = getDateAndTimeInTz(now, timezone);
   if (date > dateOnly) return true;
   if (date < dateOnly) return false;
-  return time >= "00:01:00"; // 00:00:00–00:00:59 stays before cutoff (no implicit midnight)
+  // Same date: at or after 00:01:00. Midnight (00:00:00–00:00:59) is before cutoff.
+  return hour > 0 || minute >= 1;
 }
 
 function addDays(dateOnly: DateOnly, days: number): DateOnly {
