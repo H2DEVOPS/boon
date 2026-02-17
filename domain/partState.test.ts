@@ -31,11 +31,21 @@ describe("computePartState", () => {
     expect(computePartState(inputs)).toBe("NotDue");
   });
 
-  it("now just before cutoff(endDate) => NotDue", () => {
+  it("now just before cutoff(endDate) => NotDue (no implicit midnight)", () => {
     const inputs: PartStateInputs = {
       endDate: "2025-02-17",
       approved: false,
       now: ts("2025-02-17T00:00:59Z"),
+      timezone: "UTC",
+    };
+    expect(computePartState(inputs)).toBe("NotDue");
+  });
+
+  it("now at midnight on endDate => NotDue (cutoff is 00:01)", () => {
+    const inputs: PartStateInputs = {
+      endDate: "2025-02-17",
+      approved: false,
+      now: ts("2025-02-17T00:00:00Z"),
       timezone: "UTC",
     };
     expect(computePartState(inputs)).toBe("NotDue");

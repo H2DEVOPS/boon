@@ -20,7 +20,10 @@ export interface PartStateInputs {
   readonly timezone: string;
 }
 
-// --- Cutoff helpers (00:01 in timezone) ---
+// --- Cutoff helpers ---
+// cutoff(date) = date at 00:01 in timezone (not midnight).
+// now < cutoff(date)  → before cutoff (previous state)
+// now >= cutoff(date) → at or past cutoff
 
 function getDateAndTimeInTz(ts: number, timezone: string): { date: DateOnly; time: string } {
   const formatter = new Intl.DateTimeFormat("en-CA", {
@@ -40,9 +43,12 @@ function getDateAndTimeInTz(ts: number, timezone: string): { date: DateOnly; tim
   return { date, time };
 }
 
-function isPastCutoff(now: Timestamp, dateOnly: DateOnly, timezone: string): boolean {
+/** True iff now >= cutoff(dateOnly), i.e. at or past 00:01 on that date in timezone. */
+function isAtOrPastCutoff(now: Timestamp, dateOnly: DateOnly, timezone: string): boolean {
   const { date, time } = getDateAndTimeInTz(now, timezone);
-  return date > dateOnly || (date === dateOnly && time >= "00:01:00");
+  if (date > dateOnly) return true;
+  if (date < dateOnly) return false;
+  return time >= "00:01:00"; // 00:00:00–00:00:59 stays before cutoff (no implicit midnight)
 }
 
 function addDays(dateOnly: DateOnly, days: number): DateOnly {
@@ -58,14 +64,14 @@ export function computePartState(inputs: PartStateInputs): PartState {
   const { endDate, approved, notificationDate, now, timezone } = inputs;
 
   if (approved) return "Approved";
-  if (!isPastCutoff(now, endDate, timezone)) return "NotDue";
+  if (!isAtOrPastCutoff(now, endDate, timezone)) return "NotDue"; // now < cutoff(endDate)
   if (
     notificationDate != null &&
-    !isPastCutoff(now, notificationDate, timezone)
+    !isAtOrPastCutoff(now, notificationDate, timezone)
   )
     return "Snoozed";
-  if (isPastCutoff(now, addDays(endDate, 1), timezone)) return "Overdue";
-  return "Due";
+  if (isAtOrPastCutoff(now, addDays(endDate, 1), timezone)) return "Overdue"; // now >= cutoff(endDate+1)
+  return "Due"; // cutoff(endDate) <= now < cutoff(endDate+1)
 }
 
 /** True iff state is in Tasks list (Due | Overdue | Snoozed). */
