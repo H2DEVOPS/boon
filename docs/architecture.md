@@ -1,0 +1,4 @@
+- Domain logic isolated in /domain
+- UI contains no business logic
+- Backend is source of truth
+- Deterministic computations required
