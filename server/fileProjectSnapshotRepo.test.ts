@@ -68,8 +68,9 @@ describe("FileProjectSnapshotRepo", () => {
 
     const loaded1 = await repo.getProject("proj1");
     expect(loaded1).not.toBeNull();
-    // Mutate returned snapshot
-    loaded1!.parts.push({
+    // Mutate a shallow copy of the returned parts array to avoid touching readonly.
+    const copy = [...loaded1!.parts];
+    copy.push({
       partId: "p2",
       endDate: "2025-02-18",
       stageId: "s1",
