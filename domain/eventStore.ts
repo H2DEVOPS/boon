@@ -4,12 +4,14 @@
  */
 
 import type { DomainEventUnion } from "./events.js";
+import type { ProjectorSnapshot } from "./projectorSnapshot.js";
 
 /** Project-scoped event store interface. Append-only. Events immutable. */
 export interface EventStore {
   append(projectId: string, events: readonly DomainEventUnion[]): Promise<void>;
   loadByPart(projectId: string, partId: string): Promise<DomainEventUnion[]>;
   loadByProject(projectId: string): Promise<DomainEventUnion[]>;
+  compact(projectId: string, snapshot: ProjectorSnapshot): Promise<void>;
 }
 
 /** In-memory project-scoped adapter. For tests and deterministic replay. */
@@ -30,6 +32,12 @@ export class InMemoryProjectEventStore implements EventStore {
   async loadByProject(projectId: string): Promise<DomainEventUnion[]> {
     const list = this.byProject.get(projectId) ?? [];
     return list.slice();
+  }
+
+  async compact(projectId: string, snapshot: ProjectorSnapshot): Promise<void> {
+    // No-op for in-memory store; provided for interface completeness.
+    void projectId;
+    void snapshot;
   }
 
   /** Reset for tests. Not on EventStore interface. */

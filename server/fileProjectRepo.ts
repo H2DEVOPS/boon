@@ -94,10 +94,21 @@ export class FileProjectRepo implements ProjectRepo {
     const dir = path.dirname(file);
     await fs.mkdir(dir, { recursive: true });
 
-    const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
+    const tmp = `${file}.tmp`;
     const json = JSON.stringify(snapshot, null, 2);
 
     await fs.writeFile(tmp, json, "utf8");
     await fs.rename(tmp, file);
+  }
+
+  async deleteProject(projectId: string): Promise<void> {
+    const file = this.snapshotPath(projectId);
+    try {
+      await fs.unlink(file);
+    } catch (err: unknown) {
+      const e = err as NodeJS.ErrnoException;
+      if (e?.code === "ENOENT") return;
+      throw err;
+    }
   }
 }

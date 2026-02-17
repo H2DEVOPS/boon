@@ -68,5 +68,8 @@ export function createMockProjectRepo(): ProjectRepo {
     async saveProject(snapshot: ProjectSnapshot): Promise<void> {
       SNAPSHOTS.set(snapshot.projectId, snapshot);
     },
+     async deleteProject(projectId: string): Promise<void> {
+       SNAPSHOTS.delete(projectId);
+     },
   };
 }

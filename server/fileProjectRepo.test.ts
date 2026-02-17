@@ -109,6 +109,56 @@ describe("FileProjectRepo", () => {
     await expect(repo.getProject("proj1")).rejects.toThrow();
   });
 
+  it("saveProject twice replaces content", async () => {
+    const repo = new FileProjectRepo(rootDir);
+    const first: ProjectSnapshot = {
+      ...baseSnapshot,
+      projectId: "proj1",
+      title: "First",
+    };
+    const second: ProjectSnapshot = {
+      ...baseSnapshot,
+      projectId: "proj1",
+      title: "Second",
+    };
+
+    await repo.saveProject(first);
+    let loaded = await repo.getProject("proj1");
+    expect(loaded).not.toBeNull();
+    expect(loaded!.title).toBe("First");
+
+    await repo.saveProject(second);
+    loaded = await repo.getProject("proj1");
+    expect(loaded).not.toBeNull();
+    expect(loaded!.title).toBe("Second");
+  });
+
+  it("deleteProject removes snapshot and listProjects reflects deletion", async () => {
+    const repo = new FileProjectRepo(rootDir);
+    const snap: ProjectSnapshot = {
+      ...baseSnapshot,
+      projectId: "proj1",
+      title: "ToDelete",
+    };
+    await repo.saveProject(snap);
+
+    let projects = await repo.listProjects();
+    expect(projects.some((p) => p.projectId === "proj1")).toBe(true);
+
+    await repo.deleteProject("proj1");
+
+    const loaded = await repo.getProject("proj1");
+    expect(loaded).toBeNull();
+
+    projects = await repo.listProjects();
+    expect(projects.some((p) => p.projectId === "proj1")).toBe(false);
+  });
+
+  it("deleteProject on missing project does not throw", async () => {
+    const repo = new FileProjectRepo(rootDir);
+    await expect(repo.deleteProject("missing")).resolves.toBeUndefined();
+  });
+
   afterEach(() => {
     if (existsSync(rootDir)) {
       rmSync(rootDir, { recursive: true, force: true });

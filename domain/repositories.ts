@@ -16,4 +16,5 @@ export interface ProjectRepo {
   listProjects(): Promise<readonly ProjectSummary[]>;
   getProject(projectId: string): Promise<ProjectSnapshot | null>;
   saveProject(snapshot: ProjectSnapshot): Promise<void>;
+  deleteProject(projectId: string): Promise<void>;
 }
