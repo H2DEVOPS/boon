@@ -105,13 +105,16 @@ describe("server API contract", () => {
         tasks: unknown[];
         quality: unknown[];
         anomalies: unknown[];
-        pace: unknown;
+        pace: { average: number | null; worst: number | null; best: number | null };
       };
       expect(data).toHaveProperty("tasks");
       expect(data).toHaveProperty("quality");
       expect(data).toHaveProperty("anomalies");
       expect(data).toHaveProperty("pace");
       expect(Array.isArray(data.tasks)).toBe(true);
+      expect(data.pace).toHaveProperty("average");
+      expect(data.pace).toHaveProperty("worst");
+      expect(data.pace).toHaveProperty("best");
     });
 
     it("approving a part makes it disappear from tasks", async () => {
@@ -177,6 +180,21 @@ describe("server API contract", () => {
       await handle(d2.req, d2.res);
       const tasks2 = (d2.res.json() as { tasks: Array<{ partId: string }> }).tasks;
       expect(tasks2.some((t) => t.partId === "q1")).toBe(false);
+    });
+
+    it("pace ignores non-completed parts", async () => {
+      const { handle } = createApp();
+      // Approve without completing: should not affect pace.
+      await handle(approve("proj1", "p1").req, approve("proj1", "p1").res);
+
+      const d = dashboard("proj1", NOW_ISO);
+      await handle(d.req, d.res);
+      const data = d.res.json() as {
+        pace: { average: number | null; worst: number | null; best: number | null };
+      };
+      expect(data.pace.average).toBeNull();
+      expect(data.pace.worst).toBeNull();
+      expect(data.pace.best).toBeNull();
     });
   });
 
