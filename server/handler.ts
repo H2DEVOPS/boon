@@ -15,6 +15,8 @@ import type { DomainEventUnion } from "../domain/events.js";
 import { apiError, type ErrorCode } from "./apiErrors.js";
 import { projectPace } from "../domain/pace.js";
 import { projectProgress } from "../domain/progress.js";
+import type { ProjectSnapshot } from "../domain/projectSnapshot.js";
+import { validateProjectSnapshot } from "../domain/projectSnapshot.js";
 
 const API = "/api";
 
@@ -320,6 +322,66 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
         } else {
           sendError(res, 400, "INVALID_INPUT", err instanceof Error ? err.message : "Bad request");
         }
+      }
+      return;
+    }
+
+    // --- POST /api/admin/projects/:projectId/snapshot ---
+    const adminSnapshotMatch = pathname.match(new RegExp(`^${API}/admin/projects/([^/]+)/snapshot$`));
+    if (method === "POST" && adminSnapshotMatch) {
+      const projectId = decodeURIComponent(adminSnapshotMatch[1] ?? "");
+      let snapshot: ProjectSnapshot;
+
+      try {
+        const body = await parseBody(req);
+        if (
+          !body ||
+          typeof body !== "object" ||
+          typeof (body as { projectId?: unknown }).projectId !== "string"
+        ) {
+          sendError(res, 400, "INVALID_INPUT", "Invalid snapshot payload");
+          return;
+        }
+        snapshot = body as ProjectSnapshot;
+      } catch (err) {
+        sendError(
+          res,
+          400,
+          "INVALID_INPUT",
+          err instanceof Error ? err.message : "Invalid JSON"
+        );
+        return;
+      }
+
+      if (snapshot.projectId !== projectId) {
+        sendError(res, 400, "INVALID_INPUT", "projectId mismatch between path and body");
+        return;
+      }
+
+      try {
+        validateProjectSnapshot(snapshot);
+      } catch (err) {
+        sendError(
+          res,
+          400,
+          "INVALID_INPUT",
+          err instanceof Error ? err.message : "Invalid snapshot"
+        );
+        return;
+      }
+
+      try {
+        await deps.projectRepo.saveProject(snapshot);
+        res.writeHead(204);
+        res.end();
+      } catch (err) {
+        deps.logger?.error(err);
+        sendError(
+          res,
+          500,
+          "INTERNAL_ERROR",
+          "Failed to save project snapshot"
+        );
       }
       return;
     }

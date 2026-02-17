@@ -7,10 +7,7 @@ import path from "node:path";
 import type { ProjectRepo, ProjectSummary } from "../domain/repositories.js";
 import type { ProjectSnapshot } from "../domain/projectSnapshot.js";
 import { validateProjectSnapshot } from "../domain/projectSnapshot.js";
-
-function safeId(projectId: string): string {
-  return projectId.replace(/[^a-zA-Z0-9._-]/g, "_");
-}
+import { safeId } from "./safeId.js";
 
 export class FileProjectRepo implements ProjectRepo {
   private readonly rootDir: string;
@@ -87,5 +84,20 @@ export class FileProjectRepo implements ProjectRepo {
       if (e?.code === "ENOENT") return null;
       throw err;
     }
+  }
+
+  async saveProject(snapshot: ProjectSnapshot): Promise<void> {
+    // Validate before writing
+    validateProjectSnapshot(snapshot);
+
+    const file = this.snapshotPath(snapshot.projectId);
+    const dir = path.dirname(file);
+    await fs.mkdir(dir, { recursive: true });
+
+    const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
+    const json = JSON.stringify(snapshot, null, 2);
+
+    await fs.writeFile(tmp, json, "utf8");
+    await fs.rename(tmp, file);
   }
 }

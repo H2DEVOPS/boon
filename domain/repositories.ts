@@ -15,4 +15,5 @@ export interface ProjectSummary {
 export interface ProjectRepo {
   listProjects(): Promise<readonly ProjectSummary[]>;
   getProject(projectId: string): Promise<ProjectSnapshot | null>;
+  saveProject(snapshot: ProjectSnapshot): Promise<void>;
 }

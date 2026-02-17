@@ -7,6 +7,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { EventStore } from "../domain/eventStore.js";
 import type { DomainEventUnion } from "../domain/events.js";
+import { safeId } from "./safeId.js";
 
 export class FileProjectEventStore implements EventStore {
   private readonly rootDir: string;
@@ -20,8 +21,8 @@ export class FileProjectEventStore implements EventStore {
   }
 
   private filePath(projectId: string): string {
-    const safeId = projectId.replace(/[^a-zA-Z0-9._-]/g, "_");
-    return path.join(this.rootDir, `${safeId}.events.ndjson`);
+    const id = safeId(projectId);
+    return path.join(this.rootDir, `${id}.events.ndjson`);
   }
 
   async append(projectId: string, events: readonly DomainEventUnion[]): Promise<void> {

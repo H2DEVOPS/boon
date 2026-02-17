@@ -56,10 +56,17 @@ const SNAPSHOTS = new Map<string, ProjectSnapshot>([
 export function createMockProjectRepo(): ProjectRepo {
   return {
     async listProjects(): Promise<readonly ProjectSummary[]> {
-      return [MOCK_PROJECT, MOCK_PROJECT2];
+      const summaries: ProjectSummary[] = [];
+      for (const snapshot of SNAPSHOTS.values()) {
+        summaries.push({ projectId: snapshot.projectId, title: snapshot.title });
+      }
+      return summaries;
     },
     async getProject(projectId: string): Promise<ProjectSnapshot | null> {
       return SNAPSHOTS.get(projectId) ?? null;
+    },
+    async saveProject(snapshot: ProjectSnapshot): Promise<void> {
+      SNAPSHOTS.set(snapshot.projectId, snapshot);
     },
   };
 }

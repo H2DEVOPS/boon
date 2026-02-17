@@ -83,6 +83,88 @@ describe("server API contract", () => {
     });
   });
 
+  describe("POST /api/admin/projects/:projectId/snapshot", () => {
+    const snapshot = {
+      projectId: "proj3",
+      title: "New Project",
+      stages: [{ id: "sX", title: "Stage X" }],
+      parts: [
+        {
+          partId: "x1",
+          endDate: "2025-03-10",
+          stageId: "sX",
+          title: "Part X1",
+          startDate: "2025-03-01",
+        },
+      ],
+      calendar: {
+        timezone: "Europe/Stockholm",
+        weekendDays: [0, 6],
+        overrides: [],
+      },
+    };
+
+    it("POST snapshot then GET /api/projects lists it", async () => {
+      const { handle } = createApp();
+
+      const post = mockReqRes({
+        method: "POST",
+        url: "/api/admin/projects/proj3/snapshot",
+        body: snapshot,
+      });
+      await handle(post.req, post.res);
+      expect(post.res.statusCode).toBe(204);
+
+      const list = mockReqRes({ method: "GET", url: "/api/projects" });
+      await handle(list.req, list.res);
+      expect(list.res.statusCode).toBe(200);
+      const projects = list.res.json() as Array<{ projectId: string; title: string }>;
+      const proj3 = projects.find((p) => p.projectId === "proj3");
+      expect(proj3).toBeDefined();
+      expect(proj3!.title).toBe("New Project");
+    });
+
+    it("POST snapshot then GET /api/projects/:projectId/gantt returns same stages/parts", async () => {
+      const { handle } = createApp();
+
+      const post = mockReqRes({
+        method: "POST",
+        url: "/api/admin/projects/proj3/snapshot",
+        body: snapshot,
+      });
+      await handle(post.req, post.res);
+      expect(post.res.statusCode).toBe(204);
+
+      const gantt = mockReqRes({ method: "GET", url: "/api/projects/proj3/gantt" });
+      await handle(gantt.req, gantt.res);
+      expect(gantt.res.statusCode).toBe(200);
+      const data = gantt.res.json() as {
+        stages: Array<{ id: string }>;
+        parts: Array<{ id: string; stageId: string }>;
+      };
+      expect(data.stages).toHaveLength(1);
+      expect(data.stages[0]!.id).toBe("sX");
+      expect(data.parts).toHaveLength(1);
+      expect(data.parts[0]!.id).toBe("x1");
+      expect(data.parts[0]!.stageId).toBe("sX");
+    });
+
+    it("mismatch path/body => 400 INVALID_INPUT", async () => {
+      const { handle } = createApp();
+      const bad = { ...snapshot, projectId: "other" };
+
+      const post = mockReqRes({
+        method: "POST",
+        url: "/api/admin/projects/proj3/snapshot",
+        body: bad,
+      });
+      await handle(post.req, post.res);
+      expect(post.res.statusCode).toBe(400);
+      const data = post.res.json() as { error: { code: string } };
+      expect(data.error.code).toBe("INVALID_INPUT");
+    });
+  });
+
   describe("GET /api/dashboard", () => {
     it("returns 400 when projectId missing", async () => {
       const { handle } = createApp();
