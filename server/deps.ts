@@ -8,7 +8,7 @@ import { InMemoryProjectEventStore } from "../domain/eventStore.js";
 import type { EventStore } from "../domain/eventStore.js";
 import type { ProjectRepo } from "../domain/repositories.js";
 import { FileProjectEventStore } from "./fileEventStore.js";
-import { FileProjectRepo } from "./fileProjectRepo.js";
+import { FileProjectSnapshotRepo } from "./fileProjectSnapshotRepo.js";
 import { createMockProjectRepo } from "./mockRepos.js";
 
 function createEventStore(): EventStore {
@@ -26,7 +26,8 @@ function createProjectRepo(): ProjectRepo {
   }
   const dir = process.env.PROJECT_STORE_DIR ?? "./data/projects";
   const rootDir = path.resolve(dir);
-  return new FileProjectRepo(rootDir);
+  // Use snapshot-backed repo for file storage (default in dev).
+  return new FileProjectSnapshotRepo(rootDir);
 }
 
 const store = createEventStore();
