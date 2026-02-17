@@ -38,3 +38,10 @@ export class NotFoundError extends DomainError {
     super(message, metadata);
   }
 }
+
+/** Thrown when optimistic concurrency expectations are violated. */
+export class ConcurrencyError extends DomainError {
+  constructor(message: string, metadata?: ErrorMetadata) {
+    super(message, metadata);
+  }
+}

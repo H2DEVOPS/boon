@@ -9,7 +9,7 @@ import type { ProjectRepo } from "../domain/repositories.js";
 import { approvePart, completePart, snoozePart, reopenPart } from "../domain/partLifecycle.js";
 import { projectDashboardState, projectPartState } from "../domain/projections.js";
 import { asTimestamp } from "../domain/core.js";
-import { InvariantViolation } from "../domain/errors.js";
+import { InvariantViolation, ConcurrencyError } from "../domain/errors.js";
 import type { PartLifecycleEvent } from "../domain/events.js";
 import type { DomainEventUnion } from "../domain/events.js";
 import { apiError, type ErrorCode } from "./apiErrors.js";
@@ -214,12 +214,15 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
           return;
         }
 
+        const allBefore = await deps.eventStore.loadByProject(projectId);
+        const expectedVersion = allBefore.length;
+
         const body = (await parseBody(req)) as { at?: string };
         const ts = parseIsoToMs(body?.at) ?? deps.clock.now();
         const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(projectId, partId));
         const next = approvePart(events, partId, asTimestamp(ts));
         const delta = next.slice(events.length).map((e) => ({ ...e, commandId }));
-        await deps.eventStore.append(projectId, delta);
+        await deps.eventStore.append(projectId, expectedVersion, delta);
         const all = await deps.eventStore.loadByProject(projectId);
         const projection = projectPartState(
           getPartLifecycleEvents(all),
@@ -233,6 +236,8 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
       } catch (err) {
         if (err instanceof InvariantViolation) {
           sendError(res, 409, "INVALID_TRANSITION", err.message, err.metadata as Record<string, unknown> | undefined);
+        } else if (err instanceof ConcurrencyError) {
+          sendError(res, 409, "CONFLICT", err.message, err.metadata as Record<string, unknown> | undefined);
         } else {
           sendError(res, 400, "INVALID_INPUT", err instanceof Error ? err.message : "Bad request");
         }
@@ -267,16 +272,21 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
           return;
         }
 
+        const allBefore = await deps.eventStore.loadByProject(projectId);
+        const expectedVersion = allBefore.length;
+
         const body = (await parseBody(req)) as { at?: string };
         const ts = parseIsoToMs(body?.at) ?? deps.clock.now();
         const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(projectId, partId));
         const next = completePart(events, partId, asTimestamp(ts));
         const delta = next.slice(events.length).map((e) => ({ ...e, commandId }));
-        await deps.eventStore.append(projectId, delta);
+        await deps.eventStore.append(projectId, expectedVersion, delta);
         sendJson(res, 200, { events: delta });
       } catch (err) {
         if (err instanceof InvariantViolation) {
           sendError(res, 409, "INVALID_TRANSITION", err.message, err.metadata as Record<string, unknown> | undefined);
+        } else if (err instanceof ConcurrencyError) {
+          sendError(res, 409, "CONFLICT", err.message, err.metadata as Record<string, unknown> | undefined);
         } else {
           sendError(res, 400, "INVALID_INPUT", err instanceof Error ? err.message : "Bad request");
         }
@@ -311,16 +321,21 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
           return;
         }
 
+        const allBefore = await deps.eventStore.loadByProject(projectId);
+        const expectedVersion = allBefore.length;
+
         const body = (await parseBody(req)) as { at?: string };
         const ts = parseIsoToMs(body?.at) ?? deps.clock.now();
         const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(projectId, partId));
         const next = reopenPart(events, partId, asTimestamp(ts));
         const delta = next.slice(events.length).map((e) => ({ ...e, commandId }));
-        await deps.eventStore.append(projectId, delta);
+        await deps.eventStore.append(projectId, expectedVersion, delta);
         sendJson(res, 200, { events: delta });
       } catch (err) {
         if (err instanceof InvariantViolation) {
           sendError(res, 409, "INVALID_TRANSITION", err.message, err.metadata as Record<string, unknown> | undefined);
+        } else if (err instanceof ConcurrencyError) {
+          sendError(res, 409, "CONFLICT", err.message, err.metadata as Record<string, unknown> | undefined);
         } else {
           sendError(res, 400, "INVALID_INPUT", err instanceof Error ? err.message : "Bad request");
         }
@@ -355,6 +370,9 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
           return;
         }
 
+        const allBefore = await deps.eventStore.loadByProject(projectId);
+        const expectedVersion = allBefore.length;
+
         const body = (await parseBody(req)) as { until?: string; at?: string };
         const until = body?.until;
         if (typeof until !== "string") {
@@ -365,11 +383,13 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
         const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(projectId, partId));
         const next = snoozePart(events, partId, until, asTimestamp(ts));
         const delta = next.slice(events.length).map((e) => ({ ...e, commandId }));
-        await deps.eventStore.append(projectId, delta);
+        await deps.eventStore.append(projectId, expectedVersion, delta);
         sendJson(res, 200, { events: delta });
       } catch (err) {
         if (err instanceof InvariantViolation) {
           sendError(res, 409, "INVALID_TRANSITION", err.message, err.metadata as Record<string, unknown> | undefined);
+        } else if (err instanceof ConcurrencyError) {
+          sendError(res, 409, "CONFLICT", err.message, err.metadata as Record<string, unknown> | undefined);
         } else {
           sendError(res, 400, "INVALID_INPUT", err instanceof Error ? err.message : "Bad request");
         }

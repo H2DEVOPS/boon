@@ -11,26 +11,34 @@ const AFTER_SNOOZE_ISO = "2025-02-25T00:01:00.000Z";
 /** 2025-02-19 12:00 UTC - before notificationDate cutoff. */
 const BEFORE_SNOOZE_ISO = "2025-02-19T12:00:00.000Z";
 
-const approve = (projectId: string, partId: string, body?: { at?: string }, headers?: Record<string, string>) =>
-  mockReqRes({
+const approve = (projectId: string, partId: string, body?: { at?: string }, headers?: Record<string, string>) => {
+  const opts: Parameters<typeof mockReqRes>[0] = {
     method: "POST",
     url: `/api/projects/${projectId}/parts/${partId}/approve`,
     body: body ?? { at: NOW_ISO },
-    headers,
-  });
+  };
+  if (headers) {
+    opts.headers = headers;
+  }
+  return mockReqRes(opts);
+};
 
 const snooze = (
   projectId: string,
   partId: string,
   body: { until: string; at?: string },
   headers?: Record<string, string>
-) =>
-  mockReqRes({
+) => {
+  const opts: Parameters<typeof mockReqRes>[0] = {
     method: "POST",
     url: `/api/projects/${projectId}/parts/${partId}/snooze`,
     body,
-    headers,
-  });
+  };
+  if (headers) {
+    opts.headers = headers;
+  }
+  return mockReqRes(opts);
+};
 
 const dashboard = (projectId: string, now?: string) =>
   mockReqRes({

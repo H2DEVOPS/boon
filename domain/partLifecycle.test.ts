@@ -13,18 +13,18 @@ const TS = asTimestamp(Date.now());
 
 describe("partLifecycle", () => {
   it("illegal approvePart from Completed rejected", () => {
-    const events = [{ type: "PartCompleted" as const, partId: "p1", timestamp: TS }];
+    const events = [{ type: "PartCompleted" as const, partId: "p1", timestamp: TS, version: 0 }];
     expect(() => approvePart(events, "p1", TS)).toThrow(InvariantViolation);
     expect(() => approvePart(events, "p1", TS)).toThrow(/Invalid transition/);
   });
 
   it("illegal approvePart from Completed rejected", () => {
-    const events = [{ type: "PartCompleted" as const, partId: "p1", timestamp: TS }];
+    const events = [{ type: "PartCompleted" as const, partId: "p1", timestamp: TS, version: 0 }];
     expect(() => approvePart(events, "p1", TS)).toThrow(InvariantViolation);
   });
 
   it("approvePart from Active succeeds", () => {
-    const events = [{ type: "PartReopened" as const, partId: "p1", timestamp: TS }];
+    const events = [{ type: "PartReopened" as const, partId: "p1", timestamp: TS, version: 0 }];
     const next = approvePart(events, "p1", TS);
     expect(next).toHaveLength(2);
     expect(next[1]).toMatchObject({ type: "PartApproved", partId: "p1" });
@@ -32,8 +32,8 @@ describe("partLifecycle", () => {
 
   it("reopenPart from Approved succeeds", () => {
     const events = [
-      { type: "PartReopened" as const, partId: "p1", timestamp: TS },
-      { type: "PartApproved" as const, partId: "p1", timestamp: TS },
+      { type: "PartReopened" as const, partId: "p1", timestamp: TS, version: 0 },
+      { type: "PartApproved" as const, partId: "p1", timestamp: TS, version: 0 },
     ];
     const next = reopenPart(events, "p1", TS);
     expect(getPartLifecycleState(next, "p1")).toBe("Active");
@@ -45,13 +45,13 @@ describe("partLifecycle", () => {
   });
 
   it("completePart from Active succeeds", () => {
-    const events = [{ type: "PartReopened" as const, partId: "p1", timestamp: TS }];
+    const events = [{ type: "PartReopened" as const, partId: "p1", timestamp: TS, version: 0 }];
     const next = completePart(events, "p1", TS);
     expect(getPartLifecycleState(next, "p1")).toBe("Completed");
   });
 
   it("snoozePart from Active succeeds", () => {
-    const events = [{ type: "PartReopened" as const, partId: "p1", timestamp: TS }];
+    const events = [{ type: "PartReopened" as const, partId: "p1", timestamp: TS, version: 0 }];
     const next = snoozePart(events, "p1", "2025-02-25", TS);
     expect(getPartLifecycleState(next, "p1")).toBe("Active");
     expect(next[1]).toMatchObject({ type: "PartSnoozed", notificationDate: "2025-02-25" });

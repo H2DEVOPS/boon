@@ -20,7 +20,7 @@ function ts(iso: string) {
 describe("projectPartCompletionStatus", () => {
   it("Exact endDate → OnTime", () => {
     const events: PartLifecycleEvent[] = [
-      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-17T12:00:00Z") },
+      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-17T12:00:00Z"), version: 0 },
     ];
     const status = projectPartCompletionStatus(events, "p1", "2025-02-17", CAL, TZ);
     expect(status).toBe<PartCompletionStatus>("OnTime");
@@ -28,7 +28,7 @@ describe("projectPartCompletionStatus", () => {
 
   it("+1 working day → OnTime", () => {
     const events: PartLifecycleEvent[] = [
-      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-18T09:00:00Z") },
+      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-18T09:00:00Z"), version: 0 },
     ];
     const status = projectPartCompletionStatus(events, "p1", "2025-02-17", CAL, TZ);
     expect(status).toBe("OnTime");
@@ -36,7 +36,7 @@ describe("projectPartCompletionStatus", () => {
 
   it("+2 working days → Delayed", () => {
     const events: PartLifecycleEvent[] = [
-      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-19T09:00:00Z") },
+      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-19T09:00:00Z"), version: 0 },
     ];
     const status = projectPartCompletionStatus(events, "p1", "2025-02-17", CAL, TZ);
     expect(status).toBe("Delayed");
@@ -44,7 +44,7 @@ describe("projectPartCompletionStatus", () => {
 
   it("Early completion → Early", () => {
     const events: PartLifecycleEvent[] = [
-      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-13T09:00:00Z") },
+      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-13T09:00:00Z"), version: 0 },
     ];
     const status = projectPartCompletionStatus(events, "p1", "2025-02-17", CAL, TZ);
     expect(status).toBe("Early");
@@ -52,7 +52,7 @@ describe("projectPartCompletionStatus", () => {
 
   it("Missing completion → NotCompleted", () => {
     const events: PartLifecycleEvent[] = [
-      { type: "PartApproved", partId: "p1", timestamp: ts("2025-02-17T09:00:00Z") },
+      { type: "PartApproved", partId: "p1", timestamp: ts("2025-02-17T09:00:00Z"), version: 0 },
     ];
     const status = projectPartCompletionStatus(events, "p1", "2025-02-17", CAL, TZ);
     expect(status).toBe("NotCompleted");
@@ -76,8 +76,8 @@ describe("computeStageProgress", () => {
 
   it("Stage subtree aggregation correct", () => {
     const events: PartLifecycleEvent[] = [
-      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-17T10:00:00Z") }, // OnTime
-      { type: "PartCompleted", partId: "p2", timestamp: ts("2025-02-19T10:00:00Z") }, // Delayed
+      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-17T10:00:00Z"), version: 0 }, // OnTime
+      { type: "PartCompleted", partId: "p2", timestamp: ts("2025-02-19T10:00:00Z"), version: 0 }, // Delayed
     ];
     const progress = computeStageProgress("root", snapshot, events, CAL, TZ);
     expect(progress.total).toBe(2);
@@ -102,9 +102,9 @@ describe("projectProgress", () => {
 
   it("Percent deterministic with mix of statuses", () => {
     const events: PartLifecycleEvent[] = [
-      { type: "PartCompleted", partId: "A", timestamp: ts("2025-02-17T10:00:00Z") }, // OnTime
-      { type: "PartCompleted", partId: "B", timestamp: ts("2025-02-19T10:00:00Z") }, // Delayed
-      { type: "PartCompleted", partId: "C", timestamp: ts("2025-02-13T10:00:00Z") }, // Early
+      { type: "PartCompleted", partId: "A", timestamp: ts("2025-02-17T10:00:00Z"), version: 0 }, // OnTime
+      { type: "PartCompleted", partId: "B", timestamp: ts("2025-02-19T10:00:00Z"), version: 0 }, // Delayed
+      { type: "PartCompleted", partId: "C", timestamp: ts("2025-02-13T10:00:00Z"), version: 0 }, // Early
       // D not completed
     ];
     const stats = projectProgress(snapshot, events, CAL, TZ);

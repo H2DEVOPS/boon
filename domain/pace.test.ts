@@ -15,7 +15,7 @@ function ts(iso: string) {
 describe("projectPartPace", () => {
   it("completed on endDate → 0", () => {
     const events: PartLifecycleEvent[] = [
-      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-17T12:00:00Z") },
+      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-17T12:00:00Z"), version: 0 },
     ];
     const pace = projectPartPace(events, "p1", "2025-02-17", CAL, TZ);
     expect(pace).toBe(0);
@@ -23,7 +23,7 @@ describe("projectPartPace", () => {
 
   it("completed next working day → 1", () => {
     const events: PartLifecycleEvent[] = [
-      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-18T09:00:00Z") },
+      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-18T09:00:00Z"), version: 0 },
     ];
     const pace = projectPartPace(events, "p1", "2025-02-17", CAL, TZ);
     expect(pace).toBe(1);
@@ -32,7 +32,7 @@ describe("projectPartPace", () => {
   it("weekend crossing respected", () => {
     // Friday endDate, Monday completion → 1 working day late.
     const events: PartLifecycleEvent[] = [
-      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-17T09:00:00Z") }, // Monday
+      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-17T09:00:00Z"), version: 0 }, // Monday
     ];
     const pace = projectPartPace(events, "p1", "2025-02-14", CAL, TZ); // Friday
     expect(pace).toBe(1);
@@ -40,7 +40,7 @@ describe("projectPartPace", () => {
 
   it("early completion negative", () => {
     const events: PartLifecycleEvent[] = [
-      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-14T09:00:00Z") },
+      { type: "PartCompleted", partId: "p1", timestamp: ts("2025-02-14T09:00:00Z"), version: 0 },
     ];
     const pace = projectPartPace(events, "p1", "2025-02-17", CAL, TZ);
     expect(pace).toBeLessThan(0);
@@ -48,7 +48,7 @@ describe("projectPartPace", () => {
 
   it("no completed → null", () => {
     const events: PartLifecycleEvent[] = [
-      { type: "PartApproved", partId: "p1", timestamp: ts("2025-02-17T09:00:00Z") },
+      { type: "PartApproved", partId: "p1", timestamp: ts("2025-02-17T09:00:00Z"), version: 0 },
     ];
     const pace = projectPartPace(events, "p1", "2025-02-17", CAL, TZ);
     expect(pace).toBeNull();
@@ -70,9 +70,9 @@ describe("projectPace", () => {
 
   it("aggregates average, worst, best", () => {
     const events: PartLifecycleEvent[] = [
-      { type: "PartCompleted", partId: "A", timestamp: ts("2025-02-17T10:00:00Z") }, // 0
-      { type: "PartCompleted", partId: "B", timestamp: ts("2025-02-18T10:00:00Z") }, // +1
-      { type: "PartCompleted", partId: "C", timestamp: ts("2025-02-14T10:00:00Z") }, // negative
+      { type: "PartCompleted", partId: "A", timestamp: ts("2025-02-17T10:00:00Z"), version: 0 }, // 0
+      { type: "PartCompleted", partId: "B", timestamp: ts("2025-02-18T10:00:00Z"), version: 0 }, // +1
+      { type: "PartCompleted", partId: "C", timestamp: ts("2025-02-14T10:00:00Z"), version: 0 }, // negative
     ];
     const stats = projectPace(parts, events, CAL, TZ);
     expect(stats.average).not.toBeNull();

@@ -15,6 +15,11 @@ export interface DomainEvent {
   readonly timestamp: Timestamp;
   /** Optional idempotent command identifier that produced this event. */
   readonly commandId?: CommandId;
+  /**
+   * Monotonic per-project event stream version.
+   * Assigned by the EventStore on append.
+   */
+  readonly version: number;
 }
 
 export interface PartApproved extends DomainEvent {

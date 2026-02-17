@@ -7,7 +7,8 @@ export type ErrorCode =
   | "INVALID_INPUT"
   | "NOT_FOUND"
   | "INVALID_TRANSITION"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  | "CONFLICT";
 
 export interface ApiErrorPayload {
   readonly error: {

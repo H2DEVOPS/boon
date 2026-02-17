@@ -9,6 +9,7 @@ import type { EventStore } from "../domain/eventStore.js";
 import type { DomainEventUnion } from "../domain/events.js";
 import type { ProjectorSnapshot } from "../domain/projectorSnapshot.js";
 import type { CommandId } from "../domain/command.js";
+import { ConcurrencyError } from "../domain/errors.js";
 import { safeId } from "./safeId.js";
 
 export class FileProjectEventStore implements EventStore {
@@ -32,18 +33,45 @@ export class FileProjectEventStore implements EventStore {
     return path.join(this.rootDir, `${id}.events.snapshot.json`);
   }
 
-  async append(projectId: string, events: readonly DomainEventUnion[]): Promise<void> {
-    if (events.length === 0) return;
+  async append(projectId: string, expectedVersion: number, events: readonly DomainEventUnion[]): Promise<void> {
     await this.ensureDir();
     const file = this.eventsPath(projectId);
-    const lines = events.map((e) => JSON.stringify(e) + "\n").join("");
-    const fh = await fs.open(file, "a");
+
+    let currentVersion = 0;
     try {
-      await fh.write(lines);
-      await fh.sync();
-    } finally {
-      await fh.close();
+      const text = await fs.readFile(file, "utf8");
+      const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
+      currentVersion = lines.length;
+    } catch (err: unknown) {
+      const e = err as NodeJS.ErrnoException;
+      if (e?.code !== "ENOENT") {
+        throw err;
+      }
+      currentVersion = 0;
     }
+
+    if (currentVersion !== expectedVersion) {
+      throw new ConcurrencyError("Concurrent modification detected", {
+        projectId,
+        expectedVersion,
+        currentVersion,
+      });
+    }
+
+    if (events.length === 0) return;
+
+    const base = currentVersion;
+    const lines = events
+      .map((e, index) =>
+        JSON.stringify({
+          ...e,
+          version: base + index + 1,
+        })
+      )
+      .join("\n")
+      .concat("\n");
+
+    await fs.appendFile(file, lines, "utf8");
   }
 
   private async loadSnapshot(projectId: string): Promise<ProjectorSnapshot | null> {

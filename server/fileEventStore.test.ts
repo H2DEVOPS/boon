@@ -20,19 +20,22 @@ describe("FileProjectEventStore", () => {
   it("append then loadByProject returns same events", async () => {
     const store = new FileProjectEventStore(rootDir);
     const events = [
-      { type: "PartApproved" as const, partId: "p1", timestamp: TS },
-      { type: "PartReopened" as const, partId: "p1", timestamp: TS2 },
+      { type: "PartApproved" as const, partId: "p1", timestamp: TS, version: 0 },
+      { type: "PartReopened" as const, partId: "p1", timestamp: TS2, version: 0 },
     ];
-    await store.append("proj1", events);
+    await store.append("proj1", 0, events);
 
     const loaded = await store.loadByProject("proj1");
-    expect(loaded).toEqual(events);
+    expect(loaded).toEqual([
+      { ...events[0], version: 1 },
+      { ...events[1], version: 2 },
+    ]);
   });
 
   it("isolation between projects creates separate files", async () => {
     const store = new FileProjectEventStore(rootDir);
-    await store.append("proj1", [{ type: "PartApproved" as const, partId: "p1", timestamp: TS }]);
-    await store.append("proj2", [{ type: "PartApproved" as const, partId: "q1", timestamp: TS }]);
+    await store.append("proj1", 0, [{ type: "PartApproved" as const, partId: "p1", timestamp: TS, version: 0 }]);
+    await store.append("proj2", 0, [{ type: "PartApproved" as const, partId: "q1", timestamp: TS, version: 0 }]);
 
     const file1 = path.join(rootDir, "proj1.events.ndjson");
     const file2 = path.join(rootDir, "proj2.events.ndjson");
@@ -62,23 +65,37 @@ describe("FileProjectEventStore", () => {
   it("new instance can replay events from disk", async () => {
     const store1 = new FileProjectEventStore(rootDir);
     const events = [
-      { type: "PartApproved" as const, partId: "p1", timestamp: TS },
-      { type: "PartSnoozed" as const, partId: "p1", notificationDate: "2025-02-25", timestamp: TS2 },
+      {
+        type: "PartApproved" as const,
+        partId: "p1",
+        timestamp: TS,
+        version: 0,
+      },
+      {
+        type: "PartSnoozed" as const,
+        partId: "p1",
+        notificationDate: "2025-02-25",
+        timestamp: TS2,
+        version: 0,
+      },
     ];
-    await store1.append("proj1", events);
+    await store1.append("proj1", 0, events);
 
     const store2 = new FileProjectEventStore(rootDir);
     const loaded = await store2.loadByProject("proj1");
-    expect(loaded).toEqual(events);
+    expect(loaded).toEqual([
+      { ...events[0], version: 1 },
+      { ...events[1], version: 2 },
+    ]);
   });
 
   it("append → compact → reload → state preserved via snapshot", async () => {
     const store = new FileProjectEventStore(rootDir);
     const events = [
-      { type: "PartApproved" as const, partId: "p1", timestamp: TS },
-      { type: "PartReopened" as const, partId: "p1", timestamp: TS2 },
+      { type: "PartApproved" as const, partId: "p1", timestamp: TS, version: 0 },
+      { type: "PartReopened" as const, partId: "p1", timestamp: TS2, version: 0 },
     ];
-    await store.append("proj1", events);
+    await store.append("proj1", 0, events);
 
     const snapshot: ProjectorSnapshot = {
       projectId: "proj1",
@@ -100,9 +117,9 @@ describe("FileProjectEventStore", () => {
 
   it("snapshot + later events replay correctly", async () => {
     const store = new FileProjectEventStore(rootDir);
-    await store.append("proj1", [
-      { type: "PartApproved" as const, partId: "p1", timestamp: TS },
-      { type: "PartReopened" as const, partId: "p1", timestamp: TS2 },
+    await store.append("proj1", 0, [
+      { type: "PartApproved" as const, partId: "p1", timestamp: TS, version: 0 },
+      { type: "PartReopened" as const, partId: "p1", timestamp: TS2, version: 0 },
     ]);
 
     const snapshot: ProjectorSnapshot = {
@@ -113,12 +130,12 @@ describe("FileProjectEventStore", () => {
     await store.compact("proj1", snapshot);
 
     const laterEvents = [
-      { type: "PartApproved" as const, partId: "p1", timestamp: TS3 },
+      { type: "PartApproved" as const, partId: "p1", timestamp: TS3, version: 0 },
     ];
-    await store.append("proj1", laterEvents);
+    await store.append("proj1", 0, laterEvents);
 
     const loaded = await store.loadByProject("proj1");
-    expect(loaded).toEqual(laterEvents);
+    expect(loaded).toEqual([{ ...laterEvents[0], version: 1 }]);
   });
 
   it("compaction shrinks log", async () => {
@@ -127,8 +144,9 @@ describe("FileProjectEventStore", () => {
       type: "PartApproved" as const,
       partId: `p${i}`,
       timestamp: asTimestamp(1_000 + i),
+      version: 0,
     }));
-    await store.append("proj1", manyEvents);
+    await store.append("proj1", 0, manyEvents);
 
     const file = path.join(rootDir, "proj1.events.ndjson");
     const beforeSize = statSync(file).size;
@@ -148,13 +166,16 @@ describe("FileProjectEventStore", () => {
   it("missing snapshot still works", async () => {
     const store = new FileProjectEventStore(rootDir);
     const events = [
-      { type: "PartApproved" as const, partId: "p1", timestamp: TS },
-      { type: "PartApproved" as const, partId: "p2", timestamp: TS2 },
+      { type: "PartApproved" as const, partId: "p1", timestamp: TS, version: 0 },
+      { type: "PartApproved" as const, partId: "p2", timestamp: TS2, version: 0 },
     ];
-    await store.append("proj1", events);
+    await store.append("proj1", 0, events);
 
     const loaded = await store.loadByProject("proj1");
-    expect(loaded).toEqual(events);
+    expect(loaded).toEqual([
+      { ...events[0], version: 1 },
+      { ...events[1], version: 2 },
+    ]);
   });
 
   afterEach(() => {

@@ -6,10 +6,11 @@
 import type { DomainEventUnion } from "./events.js";
 import type { ProjectorSnapshot } from "./projectorSnapshot.js";
 import type { CommandId } from "./command.js";
+import { ConcurrencyError } from "./errors.js";
 
 /** Project-scoped event store interface. Append-only. Events immutable. */
 export interface EventStore {
-  append(projectId: string, events: readonly DomainEventUnion[]): Promise<void>;
+  append(projectId: string, expectedVersion: number, events: readonly DomainEventUnion[]): Promise<void>;
   loadByPart(projectId: string, partId: string): Promise<DomainEventUnion[]>;
   loadByProject(projectId: string): Promise<DomainEventUnion[]>;
   compact(projectId: string, snapshot: ProjectorSnapshot): Promise<void>;
@@ -20,10 +21,23 @@ export interface EventStore {
 export class InMemoryProjectEventStore implements EventStore {
   private byProject = new Map<string, DomainEventUnion[]>();
 
-  async append(projectId: string, events: readonly DomainEventUnion[]): Promise<void> {
+  async append(projectId: string, expectedVersion: number, events: readonly DomainEventUnion[]): Promise<void> {
     const list = this.byProject.get(projectId) ?? [];
-    for (const e of events) list.push(e);
-    this.byProject.set(projectId, list);
+    const currentVersion = list.length;
+    if (currentVersion !== expectedVersion) {
+      throw new ConcurrencyError("Concurrent modification detected", {
+        projectId,
+        expectedVersion,
+        currentVersion,
+      });
+    }
+    if (events.length === 0) return;
+    const base = currentVersion;
+    const withVersion = events.map((e, index) => ({
+      ...e,
+      version: base + index + 1,
+    }));
+    this.byProject.set(projectId, list.concat(withVersion));
   }
 
   async loadByPart(projectId: string, partId: string): Promise<DomainEventUnion[]> {

@@ -65,7 +65,7 @@ export function approvePart(
 ): PartLifecycleEvent[] {
   const current = projectLifecycleState(events, partId);
   assertValidTransition(current, VALID_APPROVE, "approvePart");
-  return [...events, { type: "PartApproved", partId, timestamp }];
+  return [...events, { type: "PartApproved", partId, timestamp, version: 0 }];
 }
 
 /** Append PartCompleted. Valid from Active. Returns new event stream. */
@@ -76,7 +76,7 @@ export function completePart(
 ): PartLifecycleEvent[] {
   const current = projectLifecycleState(events, partId);
   assertValidTransition(current, VALID_COMPLETE, "completePart");
-  return [...events, { type: "PartCompleted", partId, timestamp }];
+  return [...events, { type: "PartCompleted", partId, timestamp, version: 0 }];
 }
 
 /** Append PartSnoozed. Valid from Active. Returns new event stream. */
@@ -88,7 +88,7 @@ export function snoozePart(
 ): PartLifecycleEvent[] {
   const current = projectLifecycleState(events, partId);
   assertValidTransition(current, VALID_SNOOZE, "snoozePart");
-  return [...events, { type: "PartSnoozed", partId, notificationDate, timestamp }];
+  return [...events, { type: "PartSnoozed", partId, notificationDate, timestamp, version: 0 }];
 }
 
 /** Append PartReopened. Valid from Completed or Approved. Returns new event stream. */
@@ -99,7 +99,7 @@ export function reopenPart(
 ): PartLifecycleEvent[] {
   const current = projectLifecycleState(events, partId);
   assertValidTransition(current, VALID_REOPEN, "reopenPart");
-  return [...events, { type: "PartReopened", partId, timestamp }];
+  return [...events, { type: "PartReopened", partId, timestamp, version: 0 }];
 }
 
 /** Project current lifecycle state for a part. */

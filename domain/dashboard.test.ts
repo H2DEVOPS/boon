@@ -27,8 +27,20 @@ describe("taskList", () => {
       { partId: "E", endDate: "2025-02-16" },
     ];
     const events = [
-      { type: "PartSnoozed" as const, partId: "C", notificationDate: "2025-02-25", timestamp: TS },
-      { type: "PartSnoozed" as const, partId: "E", notificationDate: "2025-02-26", timestamp: TS },
+      {
+        type: "PartSnoozed" as const,
+        partId: "C",
+        notificationDate: "2025-02-25",
+        timestamp: TS,
+        version: 0,
+      },
+      {
+        type: "PartSnoozed" as const,
+        partId: "E",
+        notificationDate: "2025-02-26",
+        timestamp: TS,
+        version: 0,
+      },
     ];
     const result = taskList(parts, events, NOW_UTC, "UTC", CAL);
     expect(result).toHaveLength(5);
@@ -58,7 +70,12 @@ describe("taskList", () => {
       { partId: "P2", endDate: "2025-02-19" },
     ];
     const events = [
-      { type: "PartApproved" as const, partId: "P1", timestamp: asTimestamp(new Date("2025-02-15T12:00:00Z").getTime()) },
+      {
+        type: "PartApproved" as const,
+        partId: "P1",
+        timestamp: asTimestamp(new Date("2025-02-15T12:00:00Z").getTime()),
+        version: 0,
+      },
     ];
     const beforeCutoff = asTimestamp(new Date("2025-02-19T00:00:00Z").getTime());
     const result = taskList(parts, events, beforeCutoff, "UTC", CAL);
