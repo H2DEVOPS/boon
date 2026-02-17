@@ -14,6 +14,7 @@ import type { PartLifecycleEvent } from "../domain/events.js";
 import type { DomainEventUnion } from "../domain/events.js";
 import { apiError, type ErrorCode } from "./apiErrors.js";
 import { projectPace } from "../domain/pace.js";
+import { projectProgress } from "../domain/progress.js";
 
 const API = "/api";
 
@@ -152,7 +153,8 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
         snapshot.calendar
       );
       const pace = projectPace(snapshot.parts, lifecycleEvents, snapshot.calendar, deps.clock.timezone);
-      sendJson(res, 200, { tasks, quality: [], anomalies: [], pace });
+      const progress = projectProgress(snapshot, lifecycleEvents, snapshot.calendar, deps.clock.timezone);
+      sendJson(res, 200, { tasks, quality: [], anomalies: [], pace, progress });
       return;
     }
 

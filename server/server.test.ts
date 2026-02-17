@@ -93,7 +93,7 @@ describe("server API contract", () => {
       expect(data.error.code).toBe("INVALID_INPUT");
     });
 
-    it("returns 200 + { tasks, quality, anomalies, pace } with projectId and now", async () => {
+    it("returns 200 + { tasks, quality, anomalies, pace, progress } with projectId and now", async () => {
       const { handle } = createApp();
       const { req, res } = mockReqRes({
         method: "GET",
@@ -106,11 +106,19 @@ describe("server API contract", () => {
         quality: unknown[];
         anomalies: unknown[];
         pace: { average: number | null; worst: number | null; best: number | null };
+        progress: {
+          percent: number;
+          onTime: number;
+          delayed: number;
+          early: number;
+          notCompleted: number;
+        };
       };
       expect(data).toHaveProperty("tasks");
       expect(data).toHaveProperty("quality");
       expect(data).toHaveProperty("anomalies");
       expect(data).toHaveProperty("pace");
+      expect(data).toHaveProperty("progress");
       expect(Array.isArray(data.tasks)).toBe(true);
       expect(data.pace).toHaveProperty("average");
       expect(data.pace).toHaveProperty("worst");
