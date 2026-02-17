@@ -37,7 +37,7 @@ const server = createServer((req: IncomingMessage, res: ServerResponse) => {
   sendJson(res, 404, { error: "Not Found" });
 });
 
-const PORT = 3_000;
+const PORT = Number(process.env.PORT) || 3_000;
 server.listen(PORT, () => {
   console.info(`Server listening on http://localhost:${PORT}`);
 });

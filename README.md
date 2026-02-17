@@ -17,7 +17,8 @@ Core platform project.
 
 **Server**
 
-- `npm run dev` — start server (http://localhost:3000)
+- `npm run dev` — start server (default http://localhost:3000)
+- `PORT=3001 npm run dev` — run on a different port
 
 **Web client**
 
