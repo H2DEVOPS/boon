@@ -1,9 +1,11 @@
 /**
  * Domain part state — lifecycle state machine for parts.
- * Cutoff is strictly 00:01:00 in timezone (never midnight). No external libs.
+ * Cutoff is strictly 00:01:00 in timezone (never midnight).
+ * Overdue uses project calendar (working days).
  */
 
 import type { Timestamp } from "./core.js";
+import { addWorkingDays, type ProjectCalendar } from "./calendar.js";
 
 /** Date-only string (YYYY-MM-DD). */
 export type DateOnly = string;
@@ -57,16 +59,10 @@ function isAtOrPastCutoff(now: Timestamp, dateOnly: DateOnly, timezone: string):
   return hour > 0 || minute >= 1;
 }
 
-function addDays(dateOnly: DateOnly, days: number): DateOnly {
-  const d = new Date(`${dateOnly}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10) as DateOnly;
-}
-
 // --- Public API ---
 
-/** Computes part state from inputs. */
-export function computePartState(inputs: PartStateInputs): PartState {
+/** Computes part state from inputs. Overdue uses first working day after endDate. */
+export function computePartState(inputs: PartStateInputs, calendar: ProjectCalendar): PartState {
   const { endDate, approved, notificationDate, now, timezone } = inputs;
 
   if (approved) return "Approved";
@@ -76,8 +72,9 @@ export function computePartState(inputs: PartStateInputs): PartState {
     !isAtOrPastCutoff(now, notificationDate, timezone)
   )
     return "Snoozed";
-  if (isAtOrPastCutoff(now, addDays(endDate, 1), timezone)) return "Overdue"; // now >= cutoff(endDate+1)
-  return "Due"; // cutoff(endDate) <= now < cutoff(endDate+1)
+  const firstWorkingDayAfter = addWorkingDays(endDate, 1, calendar);
+  if (isAtOrPastCutoff(now, firstWorkingDayAfter, timezone)) return "Overdue";
+  return "Due"; // cutoff(endDate) <= now < cutoff(firstWorkingDayAfter)
 }
 
 /** True iff state is in Tasks list (Due | Overdue | Snoozed). */

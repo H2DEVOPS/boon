@@ -4,6 +4,7 @@
  */
 
 import type { Timestamp } from "./core.js";
+import type { ProjectCalendar } from "./calendar.js";
 import { computePartState, isInTasks } from "./partState.js";
 
 /** Date-only string (YYYY-MM-DD). */
@@ -58,17 +59,21 @@ export interface TaskItem {
 export function taskList(
   parts: readonly Part[],
   now: Timestamp,
-  timezone: string
+  timezone: string,
+  calendar: ProjectCalendar
 ): TaskItem[] {
   const items: TaskItem[] = [];
   for (const p of parts) {
-    const state = computePartState({
-      endDate: p.endDate,
-      approved: p.approved,
-      ...(p.notificationDate != null && { notificationDate: p.notificationDate }),
-      now,
-      timezone,
-    });
+    const state = computePartState(
+      {
+        endDate: p.endDate,
+        approved: p.approved,
+        ...(p.notificationDate != null && { notificationDate: p.notificationDate }),
+        now,
+        timezone,
+      },
+      calendar
+    );
     if (!isInTasks(state)) continue;
 
     const status: TaskItem["status"] = state === "Snoozed" ? "Snoozed" : "ActionRequired";

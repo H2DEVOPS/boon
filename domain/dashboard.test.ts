@@ -8,6 +8,9 @@ import {
   type Anomaly,
 } from "./dashboard.js";
 import { asTimestamp } from "./core.js";
+import { defaultSwedishProjectCalendar } from "./calendar.js";
+
+const CAL = defaultSwedishProjectCalendar();
 
 /** Timestamp for 2025-02-18 12:00:00 UTC (past cutoff for 2025-02-17 and 2025-02-18). */
 const NOW_UTC = asTimestamp(new Date("2025-02-18T12:00:00Z").getTime());
@@ -31,7 +34,7 @@ describe("taskList", () => {
         notificationDate: "2025-02-26",
       }, // Snoozed
     ];
-    const result = taskList(parts, NOW_UTC, "UTC");
+    const result = taskList(parts, NOW_UTC, "UTC", CAL);
     expect(result).toHaveLength(5);
     // ActionRequired first: A (17), B (18), D (18) — by endDate asc, then partId
     expect(result[0]).toMatchObject({ partId: "A", status: "ActionRequired", endDate: "2025-02-17" });
@@ -49,7 +52,7 @@ describe("taskList", () => {
     ];
     // NOW_UTC = 2025-02-18 12:00 UTC. cutoff(2025-02-19) = 2025-02-19 00:01 UTC. now < that, so Y not overdue.
     // cutoff(2025-02-18) = 2025-02-18 00:01 UTC. now (18 12:00) >= that, so X included. endDate+1 = 2025-02-19, cutoff = 19 00:01. now < that, so X not overdue? User said: overdue iff now >= cutoff(endDate + 1 day). So X: endDate=17, +1=18, cutoff(18)=18 00:01. now (18 12:00) >= 18 00:01. So X is overdue.
-    const result = taskList(parts, NOW_UTC, "UTC");
+    const result = taskList(parts, NOW_UTC, "UTC", CAL);
     expect(result[0]).toMatchObject({ partId: "X", overdue: true });
     expect(result[1]).toMatchObject({ partId: "Y", overdue: false });
   });
@@ -60,7 +63,7 @@ describe("taskList", () => {
       { partId: "P2", endDate: "2025-02-19", approved: false },
     ];
     const beforeCutoff = asTimestamp(new Date("2025-02-19T00:00:00Z").getTime());
-    const result = taskList(parts, beforeCutoff, "UTC");
+    const result = taskList(parts, beforeCutoff, "UTC", CAL);
     expect(result).toHaveLength(0);
   });
 });

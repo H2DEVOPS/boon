@@ -5,6 +5,9 @@ import {
   type PartStateInputs,
 } from "./partState.js";
 import { asTimestamp } from "./core.js";
+import { defaultSwedishProjectCalendar } from "./calendar.js";
+
+const CAL = defaultSwedishProjectCalendar();
 
 function ts(iso: string): ReturnType<typeof asTimestamp> {
   return asTimestamp(new Date(iso).getTime());
@@ -18,7 +21,7 @@ describe("computePartState", () => {
       now: ts("2025-02-20T12:00:00Z"),
       timezone: "UTC",
     };
-    expect(computePartState(inputs)).toBe("Approved");
+    expect(computePartState(inputs, CAL)).toBe("Approved");
   });
 
   it("now < cutoff(endDate) => NotDue", () => {
@@ -28,7 +31,7 @@ describe("computePartState", () => {
       now: ts("2025-02-16T23:59:59Z"),
       timezone: "UTC",
     };
-    expect(computePartState(inputs)).toBe("NotDue");
+    expect(computePartState(inputs, CAL)).toBe("NotDue");
   });
 
   it("now just before cutoff(endDate) => NotDue (no implicit midnight)", () => {
@@ -38,7 +41,7 @@ describe("computePartState", () => {
       now: ts("2025-02-17T00:00:59Z"),
       timezone: "UTC",
     };
-    expect(computePartState(inputs)).toBe("NotDue");
+    expect(computePartState(inputs, CAL)).toBe("NotDue");
   });
 
   it("now at midnight on endDate => NotDue (cutoff is 00:01)", () => {
@@ -48,7 +51,7 @@ describe("computePartState", () => {
       now: ts("2025-02-17T00:00:00Z"),
       timezone: "UTC",
     };
-    expect(computePartState(inputs)).toBe("NotDue");
+    expect(computePartState(inputs, CAL)).toBe("NotDue");
   });
 
   it("now at cutoff(endDate) => Due", () => {
@@ -58,7 +61,7 @@ describe("computePartState", () => {
       now: ts("2025-02-17T00:01:00Z"),
       timezone: "UTC",
     };
-    expect(computePartState(inputs)).toBe("Due");
+    expect(computePartState(inputs, CAL)).toBe("Due");
   });
 
   it("now within endDate day => Due", () => {
@@ -68,7 +71,7 @@ describe("computePartState", () => {
       now: ts("2025-02-17T12:00:00Z"),
       timezone: "UTC",
     };
-    expect(computePartState(inputs)).toBe("Due");
+    expect(computePartState(inputs, CAL)).toBe("Due");
   });
 
   it("now just before cutoff(endDate+1) => Due", () => {
@@ -78,7 +81,7 @@ describe("computePartState", () => {
       now: ts("2025-02-18T00:00:59Z"),
       timezone: "UTC",
     };
-    expect(computePartState(inputs)).toBe("Due");
+    expect(computePartState(inputs, CAL)).toBe("Due");
   });
 
   it("now at cutoff(endDate+1) => Overdue", () => {
@@ -88,7 +91,7 @@ describe("computePartState", () => {
       now: ts("2025-02-18T00:01:00Z"),
       timezone: "UTC",
     };
-    expect(computePartState(inputs)).toBe("Overdue");
+    expect(computePartState(inputs, CAL)).toBe("Overdue");
   });
 
   it("now well past endDate => Overdue", () => {
@@ -98,7 +101,7 @@ describe("computePartState", () => {
       now: ts("2025-02-20T12:00:00Z"),
       timezone: "UTC",
     };
-    expect(computePartState(inputs)).toBe("Overdue");
+    expect(computePartState(inputs, CAL)).toBe("Overdue");
   });
 
   it("notificationDate exists and now < cutoff(notificationDate) => Snoozed", () => {
@@ -109,7 +112,7 @@ describe("computePartState", () => {
       now: ts("2025-02-18T12:00:00Z"),
       timezone: "UTC",
     };
-    expect(computePartState(inputs)).toBe("Snoozed");
+    expect(computePartState(inputs, CAL)).toBe("Snoozed");
   });
 
   it("notificationDate: now at cutoff(notificationDate) => Due when before endDate+1", () => {
@@ -122,7 +125,7 @@ describe("computePartState", () => {
       now: ts("2025-02-17T00:01:00Z"),
       timezone: "UTC",
     };
-    expect(computePartState(inputs)).toBe("Due");
+    expect(computePartState(inputs, CAL)).toBe("Due");
   });
 
   it("notificationDate: now past cutoff(notificationDate) => Overdue when past endDate+1", () => {
@@ -133,7 +136,7 @@ describe("computePartState", () => {
       now: ts("2025-02-21T00:01:00Z"),
       timezone: "UTC",
     };
-    expect(computePartState(inputs)).toBe("Overdue");
+    expect(computePartState(inputs, CAL)).toBe("Overdue");
   });
 });
 
