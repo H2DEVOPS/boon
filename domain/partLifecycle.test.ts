@@ -12,8 +12,8 @@ import { asTimestamp } from "./core.js";
 const TS = asTimestamp(Date.now());
 
 describe("partLifecycle", () => {
-  it("illegal approvePart from Planned rejected", () => {
-    const events: Parameters<typeof approvePart>[0] = [];
+  it("illegal approvePart from Completed rejected", () => {
+    const events = [{ type: "PartCompleted" as const, partId: "p1", timestamp: TS }];
     expect(() => approvePart(events, "p1", TS)).toThrow(InvariantViolation);
     expect(() => approvePart(events, "p1", TS)).toThrow(/Invalid transition/);
   });

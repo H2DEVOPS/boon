@@ -8,9 +8,9 @@ import type { PartLifecycleEvent } from "./events.js";
 
 export type PartLifecycleState = "Planned" | "Active" | "Completed" | "Approved" | "Blocked";
 
-const VALID_APPROVE: PartLifecycleState[] = ["Active"];
-const VALID_COMPLETE: PartLifecycleState[] = ["Active"];
-const VALID_SNOOZE: PartLifecycleState[] = ["Active"];
+const VALID_APPROVE: PartLifecycleState[] = ["Planned", "Active"];
+const VALID_COMPLETE: PartLifecycleState[] = ["Planned", "Active"];
+const VALID_SNOOZE: PartLifecycleState[] = ["Planned", "Active"];
 const VALID_REOPEN: PartLifecycleState[] = ["Completed", "Approved"];
 
 function projectLifecycleState(

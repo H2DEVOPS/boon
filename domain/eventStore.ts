@@ -14,7 +14,7 @@ export interface EventStore {
 
 /** In-memory adapter. For tests and deterministic replay. */
 export class InMemoryEventStore implements EventStore {
-  private readonly events: DomainEventUnion[] = [];
+  private events: DomainEventUnion[] = [];
 
   async append(events: readonly DomainEventUnion[]): Promise<void> {
     for (const e of events) this.events.push(e);
@@ -26,5 +26,10 @@ export class InMemoryEventStore implements EventStore {
 
   async loadAll(): Promise<DomainEventUnion[]> {
     return this.events.slice();
+  }
+
+  /** Reset for tests. Not on EventStore interface. */
+  clear(): void {
+    this.events = [];
   }
 }
