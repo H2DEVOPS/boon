@@ -3,7 +3,7 @@
  * No business logic.
  */
 
-import { createApp } from "./app";
+import { createApp } from "./app.js";
 
 const { server } = createApp();
 const PORT = Number(process.env.PORT) || 3_000;
