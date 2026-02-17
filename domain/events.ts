@@ -3,6 +3,7 @@
  */
 
 import type { Timestamp } from "./core.js";
+import type { CommandId } from "./command.js";
 
 /** Date-only string (YYYY-MM-DD). */
 export type DateKey = string;
@@ -12,6 +13,8 @@ export interface DomainEvent {
   readonly type: string;
   readonly partId: string;
   readonly timestamp: Timestamp;
+  /** Optional idempotent command identifier that produced this event. */
+  readonly commandId?: CommandId;
 }
 
 export interface PartApproved extends DomainEvent {

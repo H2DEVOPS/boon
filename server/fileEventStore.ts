@@ -8,6 +8,7 @@ import path from "node:path";
 import type { EventStore } from "../domain/eventStore.js";
 import type { DomainEventUnion } from "../domain/events.js";
 import type { ProjectorSnapshot } from "../domain/projectorSnapshot.js";
+import type { CommandId } from "../domain/command.js";
 import { safeId } from "./safeId.js";
 
 export class FileProjectEventStore implements EventStore {
@@ -104,6 +105,35 @@ export class FileProjectEventStore implements EventStore {
   async loadByPart(projectId: string, partId: string): Promise<DomainEventUnion[]> {
     const all = await this.loadByProject(projectId);
     return all.filter((e) => e.partId === partId);
+  }
+
+  async hasCommand(projectId: string, commandId: CommandId): Promise<boolean> {
+    const file = this.eventsPath(projectId);
+    let text: string;
+    try {
+      text = await fs.readFile(file, "utf8");
+    } catch (err: unknown) {
+      const e = err as NodeJS.ErrnoException;
+      if (e && e.code === "ENOENT") {
+        return false;
+      }
+      throw err;
+    }
+
+    const lines = text.split(/\r?\n/);
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) continue;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(line);
+      } catch {
+        throw new Error("Invalid JSON in event log");
+      }
+      const obj = parsed as { commandId?: unknown };
+      if (obj.commandId === commandId) return true;
+    }
+    return false;
   }
 
   async compact(projectId: string, snapshot: ProjectorSnapshot): Promise<void> {

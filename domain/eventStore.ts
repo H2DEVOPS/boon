@@ -5,6 +5,7 @@
 
 import type { DomainEventUnion } from "./events.js";
 import type { ProjectorSnapshot } from "./projectorSnapshot.js";
+import type { CommandId } from "./command.js";
 
 /** Project-scoped event store interface. Append-only. Events immutable. */
 export interface EventStore {
@@ -12,6 +13,7 @@ export interface EventStore {
   loadByPart(projectId: string, partId: string): Promise<DomainEventUnion[]>;
   loadByProject(projectId: string): Promise<DomainEventUnion[]>;
   compact(projectId: string, snapshot: ProjectorSnapshot): Promise<void>;
+  hasCommand(projectId: string, commandId: CommandId): Promise<boolean>;
 }
 
 /** In-memory project-scoped adapter. For tests and deterministic replay. */
@@ -32,6 +34,11 @@ export class InMemoryProjectEventStore implements EventStore {
   async loadByProject(projectId: string): Promise<DomainEventUnion[]> {
     const list = this.byProject.get(projectId) ?? [];
     return list.slice();
+  }
+
+  async hasCommand(projectId: string, commandId: CommandId): Promise<boolean> {
+    const list = this.byProject.get(projectId) ?? [];
+    return list.some((e) => e.commandId === commandId);
   }
 
   async compact(projectId: string, snapshot: ProjectorSnapshot): Promise<void> {

@@ -25,10 +25,15 @@ export function mockReq(opts: MockReqOptions = {}): IncomingMessage {
   const bodyStr =
     opts.body !== undefined ? JSON.stringify(opts.body) : "";
   const stream = Readable.from([bodyStr]);
+  const rawHeaders = opts.headers ?? {};
+  const lowerHeaders: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rawHeaders)) {
+    lowerHeaders[k.toLowerCase()] = v;
+  }
   return Object.assign(stream, {
     method: opts.method ?? "GET",
     url: opts.url ?? "/",
-    headers: opts.headers ?? {},
+    headers: lowerHeaders,
   }) as unknown as IncomingMessage;
 }
 

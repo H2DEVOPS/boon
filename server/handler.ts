@@ -180,6 +180,13 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
       return;
     }
 
+    // Extract commandId for idempotent commands (all below).
+    const commandIdHeader = req.headers["x-command-id"];
+    const getCommandId = (): import("../domain/command.js").CommandId | null => {
+      if (typeof commandIdHeader !== "string") return null;
+      return commandIdHeader as import("../domain/command.js").CommandId;
+    };
+
     // --- POST /api/projects/:projectId/parts/:partId/approve ---
     const approveMatch = pathname.match(new RegExp(`^${API}/projects/([^/]+)/parts/([^/]+)/approve$`));
     if (method === "POST" && approveMatch) {
@@ -196,11 +203,22 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
         return;
       }
       try {
+        const commandId = getCommandId();
+        if (!commandId) {
+          sendError(res, 400, "INVALID_INPUT", "x-command-id header required");
+          return;
+        }
+        if (await deps.eventStore.hasCommand(projectId, commandId)) {
+          res.writeHead(204);
+          res.end();
+          return;
+        }
+
         const body = (await parseBody(req)) as { at?: string };
         const ts = parseIsoToMs(body?.at) ?? deps.clock.now();
         const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(projectId, partId));
         const next = approvePart(events, partId, asTimestamp(ts));
-        const delta = next.slice(events.length);
+        const delta = next.slice(events.length).map((e) => ({ ...e, commandId }));
         await deps.eventStore.append(projectId, delta);
         const all = await deps.eventStore.loadByProject(projectId);
         const projection = projectPartState(
@@ -238,11 +256,22 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
         return;
       }
       try {
+        const commandId = getCommandId();
+        if (!commandId) {
+          sendError(res, 400, "INVALID_INPUT", "x-command-id header required");
+          return;
+        }
+        if (await deps.eventStore.hasCommand(projectId, commandId)) {
+          res.writeHead(204);
+          res.end();
+          return;
+        }
+
         const body = (await parseBody(req)) as { at?: string };
         const ts = parseIsoToMs(body?.at) ?? deps.clock.now();
         const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(projectId, partId));
         const next = completePart(events, partId, asTimestamp(ts));
-        const delta = next.slice(events.length);
+        const delta = next.slice(events.length).map((e) => ({ ...e, commandId }));
         await deps.eventStore.append(projectId, delta);
         sendJson(res, 200, { events: delta });
       } catch (err) {
@@ -271,11 +300,22 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
         return;
       }
       try {
+        const commandId = getCommandId();
+        if (!commandId) {
+          sendError(res, 400, "INVALID_INPUT", "x-command-id header required");
+          return;
+        }
+        if (await deps.eventStore.hasCommand(projectId, commandId)) {
+          res.writeHead(204);
+          res.end();
+          return;
+        }
+
         const body = (await parseBody(req)) as { at?: string };
         const ts = parseIsoToMs(body?.at) ?? deps.clock.now();
         const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(projectId, partId));
         const next = reopenPart(events, partId, asTimestamp(ts));
-        const delta = next.slice(events.length);
+        const delta = next.slice(events.length).map((e) => ({ ...e, commandId }));
         await deps.eventStore.append(projectId, delta);
         sendJson(res, 200, { events: delta });
       } catch (err) {
@@ -304,6 +344,17 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
         return;
       }
       try {
+        const commandId = getCommandId();
+        if (!commandId) {
+          sendError(res, 400, "INVALID_INPUT", "x-command-id header required");
+          return;
+        }
+        if (await deps.eventStore.hasCommand(projectId, commandId)) {
+          res.writeHead(204);
+          res.end();
+          return;
+        }
+
         const body = (await parseBody(req)) as { until?: string; at?: string };
         const until = body?.until;
         if (typeof until !== "string") {
@@ -313,7 +364,7 @@ export function createHandler(deps: HandlerDeps): RequestHandler {
         const ts = parseIsoToMs(body?.at) ?? deps.clock.now();
         const events = getPartLifecycleEvents(await deps.eventStore.loadByPart(projectId, partId));
         const next = snoozePart(events, partId, until, asTimestamp(ts));
-        const delta = next.slice(events.length);
+        const delta = next.slice(events.length).map((e) => ({ ...e, commandId }));
         await deps.eventStore.append(projectId, delta);
         sendJson(res, 200, { events: delta });
       } catch (err) {

@@ -11,18 +11,25 @@ const AFTER_SNOOZE_ISO = "2025-02-25T00:01:00.000Z";
 /** 2025-02-19 12:00 UTC - before notificationDate cutoff. */
 const BEFORE_SNOOZE_ISO = "2025-02-19T12:00:00.000Z";
 
-const approve = (projectId: string, partId: string, body?: { at?: string }) =>
+const approve = (projectId: string, partId: string, body?: { at?: string }, headers?: Record<string, string>) =>
   mockReqRes({
     method: "POST",
     url: `/api/projects/${projectId}/parts/${partId}/approve`,
     body: body ?? { at: NOW_ISO },
+    headers,
   });
 
-const snooze = (projectId: string, partId: string, body: { until: string; at?: string }) =>
+const snooze = (
+  projectId: string,
+  partId: string,
+  body: { until: string; at?: string },
+  headers?: Record<string, string>
+) =>
   mockReqRes({
     method: "POST",
     url: `/api/projects/${projectId}/parts/${partId}/snooze`,
     body,
+    headers,
   });
 
 const dashboard = (projectId: string, now?: string) =>
@@ -217,7 +224,7 @@ describe("server API contract", () => {
       const tasksBefore = (before.res.json() as { tasks: Array<{ partId: string }> }).tasks;
       expect(tasksBefore.find((t) => t.partId === "p1")).toBeDefined();
 
-      const appr = approve("proj1", "p1");
+      const appr = approve("proj1", "p1", undefined, { "x-command-id": "cmd-approve-dashboard" });
       await handle(appr.req, appr.res);
       expect(appr.res.statusCode).toBe(200);
 
@@ -232,7 +239,7 @@ describe("server API contract", () => {
       const clock = { now: () => NOW_MS, timezone: "Europe/Stockholm" };
       const { handle } = createApp({ deps: { clock } });
 
-      const snz = snooze("proj1", "p4", { until: "2025-02-25", at: NOW_ISO });
+      const snz = snooze("proj1", "p4", { until: "2025-02-25", at: NOW_ISO }, { "x-command-id": "cmd-snooze-dashboard" });
       await handle(snz.req, snz.res);
       expect(snz.res.statusCode).toBe(200);
 
@@ -257,8 +264,10 @@ describe("server API contract", () => {
 
     it("dashboard only includes events for the project", async () => {
       const { handle } = createApp();
-      await handle(approve("proj1", "p1").req, approve("proj1", "p1").res);
-      await handle(approve("proj2", "q1").req, approve("proj2", "q1").res);
+      await handle(approve("proj1", "p1", undefined, { "x-command-id": "cmd-dash-p1" }).req,
+        approve("proj1", "p1", undefined, { "x-command-id": "cmd-dash-p1" }).res);
+      await handle(approve("proj2", "q1", undefined, { "x-command-id": "cmd-dash-q1" }).req,
+        approve("proj2", "q1", undefined, { "x-command-id": "cmd-dash-q1" }).res);
 
       const d1 = dashboard("proj1", NOW_ISO);
       await handle(d1.req, d1.res);
@@ -339,6 +348,7 @@ describe("server API contract", () => {
         method: "POST",
         url: "/api/projects/proj2/parts/p1/approve",
         body: { at: NOW_ISO },
+        headers: { "x-command-id": "cmd-other" },
       });
       await handle(req, res);
       expect(res.statusCode).toBe(404);
@@ -348,7 +358,7 @@ describe("server API contract", () => {
 
     it("returns 200 + { events, state } on success", async () => {
       const { handle } = createApp();
-      const appr = approve("proj1", "p1");
+      const appr = approve("proj1", "p1", undefined, { "x-command-id": "cmd-1" });
       await handle(appr.req, appr.res);
       expect(appr.res.statusCode).toBe(200);
       const data = appr.res.json() as { events: unknown[]; state: unknown };
@@ -365,6 +375,7 @@ describe("server API contract", () => {
         method: "POST",
         url: "/api/projects/proj1/parts/p1/complete",
         body: { at: NOW_ISO },
+        headers: { "x-command-id": "cmd-complete" },
       });
       await handle(req, res);
       expect(res.statusCode).toBe(200);
@@ -377,11 +388,13 @@ describe("server API contract", () => {
   describe("POST /api/projects/:projectId/parts/:partId/reopen", () => {
     it("returns 200 + { events } on success", async () => {
       const { handle } = createApp();
-      await handle(approve("proj1", "p1").req, approve("proj1", "p1").res);
+      await handle(approve("proj1", "p1", undefined, { "x-command-id": "cmd-approve" }).req,
+        approve("proj1", "p1", undefined, { "x-command-id": "cmd-approve" }).res);
       const { req, res } = mockReqRes({
         method: "POST",
         url: "/api/projects/proj1/parts/p1/reopen",
         body: { at: NOW_ISO },
+        headers: { "x-command-id": "cmd-reopen" },
       });
       await handle(req, res);
       expect(res.statusCode).toBe(200);
@@ -398,6 +411,7 @@ describe("server API contract", () => {
         method: "POST",
         url: "/api/projects/proj1/parts/p4/snooze",
         body: { at: NOW_ISO },
+        headers: { "x-command-id": "cmd-snooze-missing-until" },
       });
       await handle(req, res);
       expect(res.statusCode).toBe(400);
@@ -407,12 +421,71 @@ describe("server API contract", () => {
 
     it("returns 200 + { events } on success", async () => {
       const { handle } = createApp();
-      const snz = snooze("proj1", "p4", { until: "2025-02-25", at: NOW_ISO });
+      const snz = snooze("proj1", "p4", { until: "2025-02-25", at: NOW_ISO }, { "x-command-id": "cmd-snooze-success" });
       await handle(snz.req, snz.res);
       expect(snz.res.statusCode).toBe(200);
       const data = snz.res.json() as { events: unknown[] };
       expect(data).toHaveProperty("events");
       expect(Array.isArray(data.events)).toBe(true);
+    });
+  });
+
+  describe("idempotent commands", () => {
+    it("same commandId twice → events written once", async () => {
+      const { handle } = createApp();
+      const cmdId = "cmd-idempotent-1";
+
+      const first = approve("proj1", "p1", undefined, { "x-command-id": cmdId });
+      await handle(first.req, first.res);
+      expect(first.res.statusCode).toBe(200);
+
+      const second = approve("proj1", "p1", undefined, { "x-command-id": cmdId });
+      await handle(second.req, second.res);
+      expect(second.res.statusCode).toBe(204);
+
+      const eventsRes = partEvents("proj1", "p1");
+      await handle(eventsRes.req, eventsRes.res);
+      expect(eventsRes.res.statusCode).toBe(200);
+      const events = eventsRes.res.json() as Array<{ type: string }>;
+      expect(events.filter((e) => e.type === "PartApproved")).toHaveLength(1);
+    });
+
+    it("different commandId → events written twice", async () => {
+      const { handle } = createApp();
+
+      const first = approve("proj1", "p1", undefined, { "x-command-id": "cmd-a" });
+      await handle(first.req, first.res);
+      expect(first.res.statusCode).toBe(200);
+
+      const second = approve("proj1", "p2", undefined, { "x-command-id": "cmd-b" });
+      await handle(second.req, second.res);
+      expect(second.res.statusCode).toBe(200);
+
+      const eventsP1 = partEvents("proj1", "p1");
+      await handle(eventsP1.req, eventsP1.res);
+      expect(eventsP1.res.statusCode).toBe(200);
+      const e1 = eventsP1.res.json() as Array<{ type: string }>;
+
+      const eventsP2 = partEvents("proj1", "p2");
+      await handle(eventsP2.req, eventsP2.res);
+      expect(eventsP2.res.statusCode).toBe(200);
+      const e2 = eventsP2.res.json() as Array<{ type: string }>;
+
+      expect(e1.filter((e) => e.type === "PartApproved")).toHaveLength(1);
+      expect(e2.filter((e) => e.type === "PartApproved")).toHaveLength(1);
+    });
+
+    it("missing commandId → 400 INVALID_INPUT", async () => {
+      const { handle } = createApp();
+      const { req, res } = mockReqRes({
+        method: "POST",
+        url: "/api/projects/proj1/parts/p1/approve",
+        body: { at: NOW_ISO },
+      });
+      await handle(req, res);
+      expect(res.statusCode).toBe(400);
+      const data = res.json() as { error: { code: string } };
+      expect(data.error.code).toBe("INVALID_INPUT");
     });
   });
 
@@ -428,6 +501,7 @@ describe("server API contract", () => {
         method: "POST",
         url: "/api/projects/proj1/parts/p1/approve",
         body: { at: at1 },
+        headers: { "x-command-id": "cmd-order-1" },
       });
       await handle(r1.req, r1.res);
       expect(r1.res.statusCode).toBe(200);
@@ -436,6 +510,7 @@ describe("server API contract", () => {
         method: "POST",
         url: "/api/projects/proj1/parts/p1/reopen",
         body: { at: at2 },
+        headers: { "x-command-id": "cmd-order-2" },
       });
       await handle(r2.req, r2.res);
       expect(r2.res.statusCode).toBe(200);
