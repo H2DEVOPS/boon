@@ -1,22 +1,22 @@
 /**
  * Domain dashboard — list rules for tasks, quality, anomalies.
- * Cutoff logic delegated to partState (computePartState / isInTasks).
+ * Consumes projections only. No raw dates, no cutoff logic, no mutable flags.
  */
 
 import type { Timestamp } from "./core.js";
 import type { ProjectCalendar } from "./calendar.js";
-import { computePartState, isInTasks } from "./partState.js";
+import type { PartLifecycleEvent } from "./events.js";
+import {
+  projectDashboardState,
+  type PartBase,
+  type TaskItem,
+} from "./projections.js";
 
 /** Date-only string (YYYY-MM-DD). */
 export type DateOnly = string;
 
-/** Part model — minimal fields for task list. */
-export interface Part {
-  readonly partId: string;
-  readonly endDate: DateOnly;
-  readonly approved: boolean;
-  readonly notificationDate?: DateOnly;
-}
+/** Part model — minimal fields. State derived from event stream. */
+export type Part = PartBase;
 
 /** Quality item state. */
 export type QualityState = "NotStarted" | "Ongoing" | "Done";
@@ -45,49 +45,20 @@ export interface Anomaly {
   readonly priority: AnomalyPriority;
 }
 
-/** Task list item. */
-export interface TaskItem {
-  readonly partId: string;
-  readonly status: "ActionRequired" | "Snoozed";
-  readonly endDate: DateOnly;
-  readonly overdue: boolean;
-}
+/** Task list item. Re-exported from projections. */
+export type { TaskItem } from "./projections.js";
 
 // --- Public API ---
 
-/** Returns task list: parts in Tasks (Due | Overdue | Snoozed); ordered by status then endDate. */
+/** Returns task list via projection. Parts + events + now → TaskItem[]. */
 export function taskList(
   parts: readonly Part[],
+  events: readonly PartLifecycleEvent[],
   now: Timestamp,
   timezone: string,
   calendar: ProjectCalendar
 ): TaskItem[] {
-  const items: TaskItem[] = [];
-  for (const p of parts) {
-    const state = computePartState(
-      {
-        endDate: p.endDate,
-        approved: p.approved,
-        ...(p.notificationDate != null && { notificationDate: p.notificationDate }),
-        now,
-        timezone,
-      },
-      calendar
-    );
-    if (!isInTasks(state)) continue;
-
-    const status: TaskItem["status"] = state === "Snoozed" ? "Snoozed" : "ActionRequired";
-    const overdue = state === "Overdue";
-    items.push({ partId: p.partId, status, endDate: p.endDate, overdue });
-  }
-  const statusOrder = { ActionRequired: 0, Snoozed: 1 };
-  items.sort((a, b) => {
-    if (statusOrder[a.status] !== statusOrder[b.status])
-      return statusOrder[a.status] - statusOrder[b.status];
-    if (a.endDate !== b.endDate) return a.endDate.localeCompare(b.endDate);
-    return a.partId.localeCompare(b.partId);
-  });
-  return items;
+  return projectDashboardState(parts, events, now, timezone, calendar);
 }
 
 const QUALITY_STATE_ORDER: Record<QualityState, number> = {
