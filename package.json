@@ -9,8 +9,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    dev:server → tsx server/index.ts
-        "dev": "npm run dev:server"
+    "dev:server": "tsx server/index.ts",
+    "dev": "npm run dev:server"
   },
   "keywords": [],
   "author": "",
