@@ -31,6 +31,7 @@ function getDateAndTimeInTz(
 ): { date: DateOnly; hour: number; minute: number } {
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
+    hourCycle: "h23",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -42,7 +43,9 @@ function getDateAndTimeInTz(
   const parts = formatter.formatToParts(ts);
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "0";
   const date: DateOnly = `${get("year")}-${get("month")}-${get("day")}`;
-  return { date, hour: Number(get("hour")), minute: Number(get("minute")) };
+  const hour = Number(get("hour"));
+  const normalizedHour = hour === 24 ? 0 : hour;
+  return { date, hour: normalizedHour, minute: Number(get("minute")) };
 }
 
 /** True iff now >= cutoff(dateOnly). Uses explicit date first, then time. */
